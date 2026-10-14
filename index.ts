@@ -28,7 +28,11 @@ export const name = 'dsh-file-guide'
 export const inject = ['tools']
 
 export interface Config {
-  /** 自动纠偏（把未分类文件代写到规范路径）：默认开。 */
+  /**
+   * 自动纠偏（方案 A：插件代写到规范路径）：**默认 false**。
+   * false = 方案 B：打回并在指引单里给出【正确路径】，由 agent 自己用新路径重试 write
+   * （宿主原生 write 依旧是文件的写者）。
+   */
   autoCorrect?: boolean
 }
 

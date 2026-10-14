@@ -5,8 +5,11 @@
  * 判定结果三态：
  *   - pass     → 放行，原生 write 照常执行（合规路径零打扰）
  *   - deny     → 打回，reason = 指引单（agent 拿到正确路径与分类菜单）
- *   - correct  → 插件**代写到规范路径**，再打回原调用并告知实际落点（宿主不允许改工具参数，
- *                故「改路径」只能由监听器自己完成写盘）
+ *   - correct  → 已算好规范落点：
+ *                · 默认（方案 B）→ 打回并在指引单里给出【正确路径】，agent 用新路径重试 write
+ *                · autoCorrect=true（方案 A）→ 插件代写到规范路径，再打回原调用并告知实际落点
+ *                  （宿主把 exec.arguments 深度冻结、决策类型也没有「改参数」一档，
+ *                    故无法让原生 write 写到纠正后的路径，只能代写或让 agent 重试）
  *
  * @module dsh-file-guide/intercept
  */
@@ -18,7 +21,6 @@ import { extKeyOf, toAbs } from './paths.js'
 import { renderCorrection, renderGuidance } from './guidance.js'
 import { scanReality, listNames } from './scan.js'
 import type { RulesStore } from './rules.js'
-import type { DenyVerdict } from './types.js'
 
 /** 哪些工具算「新建文件」。MVP 只认 write（str_replace_editor 的 create 不在第一版范围）。 */
 const WRITE_TOOLS = new Set(['write'])
@@ -28,7 +30,10 @@ interface Denial { count: number; at: number }
 export interface InterceptorDeps {
   /** 同一目标的拦截记忆保留时长（默认 10 分钟）——超时视为新的一次尝试。 */
   denialTtlMs?: number
-  /** 自动纠偏（把未分类文件代写到规范路径）：默认开。 */
+  /**
+   * 自动纠偏（方案 A：插件代写到规范路径）：**默认关**。
+   * 关 = 方案 B：打回并给出【正确路径】，由 agent 用新路径重试 write。
+   */
   autoCorrect?: boolean
   /** 写盘端口（测试可注入假实现）。 */
   writeFile?: (path: string, content: string, encoding?: 'utf8') => void
@@ -43,7 +48,7 @@ export function installInterceptor(
   deps: InterceptorDeps = {},
 ): () => void {
   const ttl = deps.denialTtlMs ?? 10 * 60 * 1000
-  const autoCorrect = deps.autoCorrect !== false
+  const autoCorrect = deps.autoCorrect === true
   const writeFile = deps.writeFile ?? ((p: string, c: string) => writeFileSync(p, c, 'utf8'))
   const exists = deps.exists ?? existsSync
   const mkdirp = deps.mkdirp ?? ((p: string) => { mkdirSync(p, { recursive: true }) })
@@ -93,11 +98,19 @@ export function installInterceptor(
       return { kind: 'deny', reason: renderGuidance(verdict) }
     }
 
-    // correct：宿主不允许改工具参数，故由监听器自己按规范路径写盘，再向 agent 回执实际落点。
+    // correct：路径已算好，接下来取决于策略。
+    // 方案 B（默认）：打回 + 指引单里给出【正确路径】，agent 自己重试 → 宿主原生 write 仍是文件的写者。
     if (!autoCorrect) {
       bump(key)
-      return { kind: 'deny', reason: renderGuidance({ ...(verdict as unknown as DenyVerdict), kind: 'deny', code: 'unclassified' }) }
+      return {
+        kind: 'deny',
+        reason: renderGuidance(
+          { kind: 'deny', code: 'unclassified', target: relative(workspaceRoot, target), rules, rootAbs, tree },
+          { suggestedPath: relative(workspaceRoot, verdict.to), source: verdict.source },
+        ),
+      }
     }
+    // 方案 A：宿主不允许改工具参数，故由监听器自己按规范路径写盘，再向 agent 回执实际落点。
     try {
       mkdirp(dirname(verdict.to))
       writeFile(verdict.to, typeof args?.content === 'string' ? args.content : '', 'utf8')
@@ -115,8 +128,11 @@ export function installInterceptor(
       bump(key)
       return {
         kind: 'deny',
-        reason: `自动纠偏失败（${String((err as Error)?.message ?? err)}），请手动改用规范路径重试。\n\n`
-          + renderGuidance({ ...(verdict as unknown as DenyVerdict), kind: 'deny', code: 'unclassified' }),
+        reason: `自动纠偏失败（${String((err as Error)?.message ?? err)}）。\n\n`
+          + renderGuidance(
+            { kind: 'deny', code: 'unclassified', target: relative(workspaceRoot, target), rules, rootAbs, tree },
+            { suggestedPath: relative(workspaceRoot, verdict.to), source: verdict.source },
+          ),
       }
     }
   }

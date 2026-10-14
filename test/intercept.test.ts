@@ -29,10 +29,10 @@ afterEach(() => {
   rmSync(ws, { recursive: true, force: true })
 })
 
-function harness() {
+function harness(options: { autoCorrect?: boolean } = {}) {
   const store = new RulesStore({ workspaceRoot: ws })
   let listener: ((exec: ToolExecution, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
-  installInterceptor(store, (l) => { listener = l })
+  installInterceptor(store, (l) => { listener = l }, options)
   const call = async (filePath: string, content = '# hi\n'): Promise<{ decision: PreToolDecision; nextCalled: boolean }> => {
     let nextCalled = false
     const exec = { name: 'write', arguments: { file_path: filePath, content }, callId: 'c1', agent: { id: 'a1' } } as unknown as ToolExecution
@@ -78,22 +78,40 @@ describe('拦截器', () => {
     expect(decision).toEqual({ kind: 'allow' })
   })
 
-  it('未分类文件 → 自动纠偏（文件被写到规范路径，原调用打回并告知）', async () => {
+  it('未分类文件 → 打回并给出【正确路径】，文件不落盘（方案 B，默认）', async () => {
     const { call } = harness()
-    // 现实目录里已有 docs/guides/ → 按现实惯例归位
     const { decision, nextCalled } = await call('docs/setup-guide.md', '# setup\n')
     expect(nextCalled).toBe(false)
     expect(decision.kind).toBe('deny')
+    const reason = (decision as { reason: string }).reason
+    expect(reason).toContain('【正确路径】docs/guides/setup-guide.md')
+    expect(reason).toContain('【请重试】')
+    expect(reason).toContain('现有目录习惯')
+    // 方案 B：插件不代写，文件仍不存在（等 agent 用新路径重试）
+    expect(existsSync(join(ws, 'docs/guides/setup-guide.md'))).toBe(false)
+  })
+
+  it('方案 A（autoCorrect）→ 插件代写到规范路径并回执落点', async () => {
+    const { call } = harness({ autoCorrect: true })
+    const { decision, nextCalled } = await call('docs/setup-guide.md', '# setup\n')
+    expect(nextCalled).toBe(false)
     expect((decision as { reason: string }).reason).toContain('已按规范创建')
-    expect(existsSync(join(ws, 'docs/guides/setup-guide.md'))).toBe(true)
     expect(readFileSync(join(ws, 'docs/guides/setup-guide.md'), 'utf8')).toBe('# setup\n')
   })
 
-  it('同名目标连续两次不合规后放行（自由发挥）', async () => {
+  it('agent 用正确路径重试 → 放行', async () => {
+    const { call } = harness()
+    const first = await call('docs/setup-guide.md')
+    expect(first.decision.kind).toBe('deny')
+    const second = await call('docs/guides/setup-guide.md')
+    expect(second.nextCalled).toBe(true)
+    expect(second.decision).toEqual({ kind: 'allow' })
+  })
+
+  it('同一错误路径连续两次 → 第二次自由发挥放行', async () => {
     const { call } = harness()
     const first = await call('docs/mystery-note.md')
     expect(first.decision.kind).toBe('deny')
-    // 自动纠偏会把第一次落盘，故第二次同名目标已存在 → 直接放行（改旧文件不拦）
     const second = await call('docs/mystery-note.md')
     expect(second.nextCalled).toBe(true)
   })

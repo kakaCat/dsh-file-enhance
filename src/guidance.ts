@@ -50,14 +50,30 @@ const HEADLINE: Record<string, string> = {
   'rules-invalid': '项目的规则文件非法，无法判定',
 }
 
+export interface GuidanceOptions {
+  /** 已算好的规范落点（方案 B：让 agent 用这个路径重试 write）。 */
+  suggestedPath?: string
+  /** 该落点的判据来源。 */
+  source?: 'reality' | 'rules'
+}
+
 /** 渲染一份指引单（纯字符串，无 I/O）。 */
-export function renderGuidance(v: DenyVerdict): string {
+export function renderGuidance(v: DenyVerdict, opts: GuidanceOptions = {}): string {
   const rules = v.rules
   const rootLabel = rules?.root ?? 'docs'
+  const suggested = opts.suggestedPath
   const out: string[] = []
   out.push(`⛔ 文件未创建：${v.target ?? '(未提供)'}`)
   out.push('')
   out.push(`【拦截原因】${HEADLINE[v.code] ?? v.code}`)
+
+  if (suggested !== undefined) {
+    out.push('')
+    out.push(`【正确路径】${suggested}`)
+    out.push(`  （判据：${opts.source === 'reality' ? '现有目录习惯' : opts.source === 'rules' ? '项目规范' : '项目规则'}）`)
+    out.push('【请重试】用这个路径再调一次 write，内容原样即可：')
+    out.push(`  write({ file_path: "${suggested}", content: <你刚才的内容> })`)
+  }
 
   switch (v.code) {
     case 'root-forbidden':
@@ -106,9 +122,15 @@ export function renderGuidance(v: DenyVerdict): string {
   }
   out.push('')
   out.push('【下一步】')
-  out.push('  1) 从「可用分类」里挑一个，用对应路径重试 write（可直接调 file_resolve 拿准确路径）')
-  out.push('  2) 都不合适 → 调 file_propose 提议新增分类（用户批准后写入规则）')
-  out.push('  3) 确认无分类可用且用户同意 → 再次 write 同一路径即放行（自由发挥）')
+  if (suggested !== undefined) {
+    out.push('  1) 直接按上面的【正确路径】重试 write（这是最省事的一条路）')
+    out.push('  2) 想换别的分类 → 调 file_resolve 或从「可用分类」里挑一个')
+    out.push('  3) 确认分类都不合适 → 调 file_propose 提议新分类（用户批准后写入规则）')
+  } else {
+    out.push('  1) 从「可用分类」里挑一个，用对应路径重试 write（可直接调 file_resolve 拿准确路径）')
+    out.push('  2) 都不合适 → 调 file_propose 提议新增分类（用户批准后写入规则）')
+    out.push('  3) 确认无分类可用且用户同意 → 再次 write 同一路径即放行（自由发挥）')
+  }
   return out.join('\n')
 }
 
