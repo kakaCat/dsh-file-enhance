@@ -42,17 +42,22 @@ agent 要新建文件
 
 「打回」不是一句错误，而是一张**指引单**：正确路径、`docs/` 现有结构（含各目录文件数与样例）、可用分类菜单、下一步重试方式。agent 看懂就地学会，用正确路径重试后放行。
 
-## 纠偏策略：默认「打回重试」（方案 B）
+## 纠偏策略：默认「自动纠偏」（方案 A）
 
 未分类文件被判定后，路径已经算好了，接下来有两种接法：
 
-| | 方案 B（默认） | 方案 A（`config.autoCorrect: true`） |
+| | 方案 A（默认） | 方案 B（`config.autoCorrect: false`） |
 |---|---|---|
-| 做法 | 打回，指引单给出【正确路径】，**agent 自己用新路径重试 write** | 插件代写到规范路径，打回原调用并回执实际落点 |
-| 文件的写者 | 宿主原生 `write`（agent 的调用） | 插件 |
-| 代价 | 多一次工具往返 | 零往返，但写文件的手不是 `write` |
+| 做法 | 插件按规范路径把内容写下去，打回原调用并回执实际落点 | 打回，指引单给出【正确路径】，由 agent 重试 write |
+| 工具调用 | 1 次（原调用被拒，但文件已就位） | 2 次（被拒 + agent 用新路径重试） |
+| 文件的写者 | 插件（**经宿主 `fs` 服务**：`fs.resolve` + `fs.writeText`，子目录 recursive 建出、文件策略参与） | 宿主原生 `write` |
 
-选 B 的原因：宿主把 `exec.arguments` **深度冻结**（`tools/src/index.ts:1445`），且 `PreToolDecision` 只有 `allow/deny/cancel/ask`、没有「改参数」一档——所以「偷偷把 `file_path` 改掉、让原生 write 写到纠正后的路径」在宿主层没有接口。既然改不了单，就让 agent 重新下单，保持写文件动作始终由 agent 发起。
+选 A 的原因：一次往返就把文件放到对的地方，agent 不必重试。
+为什么**不能**直接把 `file_path` 改掉、让原生 write 写到纠正后的路径：宿主把 `exec.arguments`
+**深度冻结**（`tools/src/index.ts:1445`），且 `PreToolDecision` 只有 `allow/deny/cancel/ask`、
+没有「改参数」一档——所以要么插件代写（A），要么让 agent 重新下单（B）。
+
+> 代写优先走宿主的 `fs` 服务（服务缺失才回落 `node:fs`），避免插件绕过宿主的文件策略与审计。
 
 ## 安装
 
@@ -117,7 +122,7 @@ categories:
 ## 已知边界
 
 - **只拦 `write` 新建的 `.md`**：改旧文件不管；非 md 不管；`bash` 里 `echo > x.md` 这类写法绕得过去（第一版不拦，靠 prompt 纪律 + `file_check` 巡检兜底）
-- **不能改工具入参**：宿主 `pre-execute` 的决策只有 allow/deny/cancel/ask，参数已深度冻结，故「路径改成规范路径」只能靠 agent 重试（默认）或插件代写（`autoCorrect: true`）
+- **不能改工具入参**：宿主 `pre-execute` 只有 allow/deny/cancel/ask，参数已深度冻结，故「让原生 write 写到纠正后的路径」不可能；默认改为插件经宿主 `fs` 服务代写（`autoCorrect: true`），想要 agent 自己重试就设 `autoCorrect: false`
 - **同一目标连拦一次即放行**（自由发挥）：根目录禁令不适用此豁免
 
 ## 开发

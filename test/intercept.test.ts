@@ -78,8 +78,21 @@ describe('拦截器', () => {
     expect(decision).toEqual({ kind: 'allow' })
   })
 
-  it('未分类文件 → 打回并给出【正确路径】，文件不落盘（方案 B，默认）', async () => {
+  it('未分类文件 → 自动纠偏：内容按规范路径落盘，原调用打回并告知（方案 A，默认）', async () => {
     const { call } = harness()
+    // 现实目录里已有 docs/guides/ → 按现实惯例归位
+    const { decision, nextCalled } = await call('docs/setup-guide.md', '# setup\n')
+    expect(nextCalled).toBe(false)
+    expect(decision.kind).toBe('deny')
+    const reason = (decision as { reason: string }).reason
+    expect(reason).toContain('本次 write 未执行')
+    expect(reason).toContain('已按项目规范写入：docs/guides/setup-guide.md')
+    expect(reason).toContain('不要再用原路径重试')
+    expect(readFileSync(join(ws, 'docs/guides/setup-guide.md'), 'utf8')).toBe('# setup\n')
+  })
+
+  it('方案 B（autoCorrect: false）→ 只打回并给出【正确路径】，文件不落盘', async () => {
+    const { call } = harness({ autoCorrect: false })
     const { decision, nextCalled } = await call('docs/setup-guide.md', '# setup\n')
     expect(nextCalled).toBe(false)
     expect(decision.kind).toBe('deny')
@@ -87,20 +100,25 @@ describe('拦截器', () => {
     expect(reason).toContain('【正确路径】docs/guides/setup-guide.md')
     expect(reason).toContain('【请重试】')
     expect(reason).toContain('现有目录习惯')
-    // 方案 B：插件不代写，文件仍不存在（等 agent 用新路径重试）
     expect(existsSync(join(ws, 'docs/guides/setup-guide.md'))).toBe(false)
   })
 
-  it('方案 A（autoCorrect）→ 插件代写到规范路径并回执落点', async () => {
-    const { call } = harness({ autoCorrect: true })
-    const { decision, nextCalled } = await call('docs/setup-guide.md', '# setup\n')
-    expect(nextCalled).toBe(false)
-    expect((decision as { reason: string }).reason).toContain('已按规范创建')
-    expect(readFileSync(join(ws, 'docs/guides/setup-guide.md'), 'utf8')).toBe('# setup\n')
+  it('代写端口可注入（宿主 fs 服务的替身）', async () => {
+    const written: Array<{ path: string; content: string }> = []
+    const store = new RulesStore({ workspaceRoot: ws })
+    let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
+    installInterceptor(store, (l) => { listener = l }, {
+      writeFile: (p, c) => { written.push({ path: p, content: c }) },
+    })
+    const exec = { name: 'write', arguments: { file_path: 'docs/setup-guide.md', content: '# x\n' }, callId: 'c', agent: { id: 'a' } } as unknown as ToolExecution
+    await listener!(exec, async () => ({ kind: 'allow' }))
+    expect(written).toHaveLength(1)
+    expect(written[0]?.path).toBe(join(ws, 'docs/guides/setup-guide.md'))
+    expect(written[0]?.content).toBe('# x\n')
   })
 
   it('agent 用正确路径重试 → 放行', async () => {
-    const { call } = harness()
+    const { call } = harness({ autoCorrect: false })
     const first = await call('docs/setup-guide.md')
     expect(first.decision.kind).toBe('deny')
     const second = await call('docs/guides/setup-guide.md')
@@ -108,8 +126,8 @@ describe('拦截器', () => {
     expect(second.decision).toEqual({ kind: 'allow' })
   })
 
-  it('同一错误路径连续两次 → 第二次自由发挥放行', async () => {
-    const { call } = harness()
+  it('同一错误路径连续两次（方案 B）→ 第二次自由发挥放行', async () => {
+    const { call } = harness({ autoCorrect: false })
     const first = await call('docs/mystery-note.md')
     expect(first.decision.kind).toBe('deny')
     const second = await call('docs/mystery-note.md')

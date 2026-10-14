@@ -134,11 +134,13 @@ export function renderGuidance(v: DenyVerdict, opts: GuidanceOptions = {}): stri
   return out.join('\n')
 }
 
-/** 自动纠偏后的回执（原调用被拦，文件已按规范创建）。 */
+/** 自动纠偏后的回执（原调用被拒、内容已按规范落盘）。 */
 export function renderCorrection(v: { to: string; from?: string; source: 'reality' | 'rules'; category?: { key?: string } }): string {
   return [
-    `✅ 已按规范创建：${v.to}`,
-    `   （你请求的 ${v.from ?? '(原路径)'} 未分类，插件已自动归位；判据来源：${v.source === 'reality' ? '现有目录习惯' : '项目规范'}${v.category?.key !== undefined ? `｜分类：${v.category.key}` : ''}）`,
-    '   后续同类文件请直接使用该路径。',
+    '路径不合规，本次 write 未执行。',
+    `该文件已按项目规范写入：${v.to}`,
+    `  · 你请求的路径：${v.from ?? '(未提供)'}（未分类，已自动归位）`,
+    `  · 判据来源：${v.source === 'reality' ? '现有目录习惯' : '项目规范'}${v.category?.key !== undefined ? `｜分类：${v.category.key}` : ''}`,
+    `  · 不要再用原路径重试；后续同类文件请直接使用 ${v.to}`,
   ].join('\n')
 }

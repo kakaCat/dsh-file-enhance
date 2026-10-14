@@ -29,9 +29,8 @@ export const inject = ['tools']
 
 export interface Config {
   /**
-   * 自动纠偏（方案 A：插件代写到规范路径）：**默认 false**。
-   * false = 方案 B：打回并在指引单里给出【正确路径】，由 agent 自己用新路径重试 write
-   * （宿主原生 write 依旧是文件的写者）。
+   * 自动纠偏（方案 A：插件按规范路径把内容写下去）：**默认 true**。
+   * false = 方案 B：打回并在指引单里给出【正确路径】，由 agent 自己用新路径重试 write。
    */
   autoCorrect?: boolean
 }
@@ -54,6 +53,23 @@ export function apply(ctx: Context, config: Config = {}): void {
   const store = new RulesStore({ workspaceRoot: process.cwd(), logger })
   const toolsDeps: ToolsDeps = {}
 
+  // 宿主 fs 服务：自动纠偏（方案 A）优先走它——父目录由 fs.writeText 的原子写 recursive 建出，
+  // 文件的策略/审计仍由宿主这一层管，插件不裸碰磁盘。服务缺失才回落到 node:fs。
+  interface HostFs {
+    resolve: (p: string, o?: { cwd?: string }) => Promise<unknown>
+    writeText: (target: unknown, content: string) => Promise<unknown>
+  }
+  let hostFs: HostFs | undefined
+  anyCtx.inject?.(['fs'], (c) => {
+    const svc = c?.fs as HostFs | undefined
+    if (svc !== undefined && typeof svc.resolve === 'function' && typeof svc.writeText === 'function') {
+      hostFs = svc
+      logger?.debug?.('fs 服务在场：自动纠偏经宿主 fs 写入（目录 recursive、策略参与）')
+    } else {
+      logger?.debug?.('fs 服务不在场：自动纠偏回落 node:fs')
+    }
+  })
+
   // 用户问答通道（file_propose 的批准弹框）：服务可能缺失（无 UI / 子代理）——
   // 缺失时 file_propose 退化为「把提议转述给用户」，绝不伪造批准。
   anyCtx.inject?.(['userQuestions'], (c) => {
@@ -73,8 +89,15 @@ export function apply(ctx: Context, config: Config = {}): void {
   anyCtx.inject?.(['tools'], (toolsCtx) => {
     const reg = (toolsCtx as { on?: (n: string, l: unknown) => unknown }).on
     if (typeof reg === 'function') {
+      const fsSvc = hostFs
       installInterceptor(store, (listener) => reg.call(toolsCtx, 'tools/pre-execute', listener), {
         autoCorrect: config.autoCorrect,
+        ...(fsSvc === undefined ? {} : {
+          writeFile: async (abs: string, content: string) => {
+            const target = await fsSvc.resolve(abs)
+            await fsSvc.writeText(target, content)
+          },
+        }),
       })
     }
     const tools = (toolsCtx as { tools?: { register: (t: unknown) => unknown } }).tools

@@ -6,10 +6,11 @@
  *   - pass     → 放行，原生 write 照常执行（合规路径零打扰）
  *   - deny     → 打回，reason = 指引单（agent 拿到正确路径与分类菜单）
  *   - correct  → 已算好规范落点：
- *                · 默认（方案 B）→ 打回并在指引单里给出【正确路径】，agent 用新路径重试 write
- *                · autoCorrect=true（方案 A）→ 插件代写到规范路径，再打回原调用并告知实际落点
- *                  （宿主把 exec.arguments 深度冻结、决策类型也没有「改参数」一档，
- *                    故无法让原生 write 写到纠正后的路径，只能代写或让 agent 重试）
+ *                · 默认（方案 A）→ 插件把内容按规范路径写下去（优先走**宿主的 fs 服务**，
+ *                  子目录由它 recursive 建出、文件策略仍参与），再打回原调用并告知实际落点
+ *                · autoCorrect=false（方案 B）→ 打回并在指引单里给出【正确路径】，由 agent 重试 write
+ *                  为什么不能直接改入参：宿主把 exec.arguments 深度冻结（tools/src/index.ts:1445），
+ *                  且 PreToolDecision 只有 allow/deny/cancel/ask，没有「改参数」一档
  *
  * @module dsh-file-guide/intercept
  */
@@ -31,12 +32,15 @@ export interface InterceptorDeps {
   /** 同一目标的拦截记忆保留时长（默认 10 分钟）——超时视为新的一次尝试。 */
   denialTtlMs?: number
   /**
-   * 自动纠偏（方案 A：插件代写到规范路径）：**默认关**。
+   * 自动纠偏（方案 A：插件按规范路径代写）：**默认开**。
    * 关 = 方案 B：打回并给出【正确路径】，由 agent 用新路径重试 write。
    */
   autoCorrect?: boolean
-  /** 写盘端口（测试可注入假实现）。 */
-  writeFile?: (path: string, content: string, encoding?: 'utf8') => void
+  /**
+   * 代写端口：优先由入口注入**宿主的 fs 服务**（`fs.resolve` + `fs.writeText`，
+   * 子目录 recursive 建出、文件策略参与）；缺省回落到 node:fs（仅测试/无 fs 服务时）。
+   */
+  writeFile?: (path: string, content: string) => void | Promise<void>
   exists?: (path: string) => boolean
   mkdirp?: (path: string) => void
 }
@@ -48,7 +52,7 @@ export function installInterceptor(
   deps: InterceptorDeps = {},
 ): () => void {
   const ttl = deps.denialTtlMs ?? 10 * 60 * 1000
-  const autoCorrect = deps.autoCorrect === true
+  const autoCorrect = deps.autoCorrect !== false
   const writeFile = deps.writeFile ?? ((p: string, c: string) => writeFileSync(p, c, 'utf8'))
   const exists = deps.exists ?? existsSync
   const mkdirp = deps.mkdirp ?? ((p: string) => { mkdirSync(p, { recursive: true }) })
@@ -110,10 +114,12 @@ export function installInterceptor(
         ),
       }
     }
-    // 方案 A：宿主不允许改工具参数，故由监听器自己按规范路径写盘，再向 agent 回执实际落点。
+    // 方案 A（默认）：宿主不允许改工具参数，故由监听器按规范路径把内容写下去，再向 agent 回执实际落点。
     try {
-      mkdirp(dirname(verdict.to))
-      writeFile(verdict.to, typeof args?.content === 'string' ? args.content : '', 'utf8')
+      // 走宿主 fs 服务时，父目录由 fs.writeText 的原子写 recursive 建出（不额外碰磁盘）；
+      // 只有回落到 node:fs 的场合才需要自己 mkdir -p。
+      if (deps.writeFile === undefined) mkdirp(dirname(verdict.to))
+      await writeFile(verdict.to, typeof args?.content === 'string' ? args.content : '')
       denials.delete(key)
       return {
         kind: 'deny',
