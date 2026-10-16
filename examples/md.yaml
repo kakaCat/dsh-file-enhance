@@ -1,7 +1,9 @@
-# .dsh/file-rules/md.yaml —— markdown 文件的分类规范（由 dsh-file-guide 读取）
+# .dsh/folder-path-rules/md.yaml —— markdown 文件的分类规范（由 dsh-file-enhance 读取）
 #
 # 这份文件是**唯一权威**：插件不内置任何生效中的规则，agent 创建文件时也只按它判定。
 # 改完即生效（插件按 mtime 热重载），不需要重启。
+#
+# 本文件由插件冷启动垫片自动生成——直接按你的项目改：增删分类、改 dest 模板、调关键词。
 #
 # 字段说明：
 #   root        该类型文件的主目录（md → docs）
@@ -34,6 +36,11 @@ categories:
     folder: adr
     keywords: [决策, adr, decision, 取舍, 技术选型]
     dest: "adr/{auto_number:4}-{slug}.md"
+
+  research:
+    folder: research
+    keywords: [调研, research, 竞品分析, 选型报告, spike, 可行性]
+    dest: "research/{slug}.md"
 
   project:
     folder: projects

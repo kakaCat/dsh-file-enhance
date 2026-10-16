@@ -1,6 +1,6 @@
 /**
  * 领域类型——判定链、规则表、扫描快照的公共形状。
- * @module dsh-file-guide/types
+ * @module dsh-file-enhance/folder-path/types
  */
 
 /** 集合型分类下的一个变体（如 projects/{project_id}/design/{slug}.md 的 design）。 */
@@ -45,7 +45,7 @@ export interface RuleTarget {
   parent: RuleCategory
 }
 
-/** 一个文件类型的一份规则（= 一个 `.dsh/file-rules/<ext>.yaml`）。 */
+/** 一个文件类型的一份规则（= 一个 `.dsh/folder-path-rules/<ext>.yaml`）。 */
 export interface RuleSet {
   type: string
   ext: string
@@ -55,7 +55,7 @@ export interface RuleSet {
 }
 
 /** RulesStore.load 的成功/失败/缺失三态。 */
-export interface LoadedRules { rules: RuleSet; path: string }
+export interface LoadedRules { rules: RuleSet; path: string; /** true = 规则来自内置默认回落（工作区无此文件），非工作区文件。 */ builtin?: boolean }
 export interface LoadedRulesError { error: string; path: string }
 export type Loaded = LoadedRules | LoadedRulesError | undefined
 

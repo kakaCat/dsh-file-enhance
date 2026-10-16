@@ -6,7 +6,7 @@ import { defineConfig } from 'tsdown'
 // ★ 宿主包必须 external：内联 @deepseek-ai/dsh-tools 会打进第二份模块级调度 Symbol，
 //   运行时工具派发直接坏掉（照抄 dsh-pmboard 的踩坑结论）。
 export default defineConfig({
-  entry: { index: 'index.ts' },
+  entry: { index: 'src/index.ts' },
   format: ['esm'],
   outDir: 'dist',
   clean: true,

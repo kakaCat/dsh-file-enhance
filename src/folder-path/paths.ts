@@ -1,6 +1,6 @@
 /**
  * 路径与命名工具——纯函数，零 I/O（判定链的底层词汇）。
- * @module dsh-file-guide/paths
+ * @module dsh-file-enhance/folder-path/paths
  */
 import { dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 

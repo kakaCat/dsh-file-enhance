@@ -3,7 +3,7 @@
  *
  * 只读、有界：深度与条目数都设上限，防大目录把指引单炸掉。
  *
- * @module dsh-file-guide/scan
+ * @module dsh-file-enhance/folder-path/scan
  */
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'

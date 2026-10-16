@@ -12,7 +12,7 @@
  *
  * I/O 只走注入的端口（listNames），故本模块可用假数据完整测试。
  *
- * @module dsh-file-guide/decide
+ * @module dsh-file-enhance/folder-path/decide
  */
 import { basename, join } from 'node:path'
 import {
@@ -110,9 +110,11 @@ export function targetsOf(cat: RuleCategory): RuleTarget[] {
 function variantFolderOf(cat: RuleCategory, name: string): RuleVariant | undefined {
   if (cat.kind !== 'collection') return undefined
   for (const v of Object.values(cat.variants ?? {})) {
-    const segs = String(v.dest ?? '').split('/').filter((s) => s !== '' && !s.startsWith('{'))
-    const last = segs.length >= 2 ? segs[segs.length - 2] : undefined
-    if (last === name) return v
+    const segs = String(v.dest ?? '').split('/').filter((s) => s !== '')
+    const fileIndex = segs.findIndex((s) => s.includes('{slug}'))
+    const dirs = (fileIndex >= 0 ? segs.slice(0, fileIndex) : segs.slice(0, -1))
+      .filter((s) => !s.startsWith('{'))
+    if (dirs.at(-1) === name) return v
   }
   return undefined
 }
@@ -183,7 +185,15 @@ export function decide(args: DecideArgs): Verdict {
     if (ruled !== undefined) {
       if (ruled.dest !== undefined && !ruled.dest.includes('{project_id}')) {
         const slug = matchesNaming(ruled.naming, stem) ? stem : slugify(stem)
-        const to = join(rootAbs, renderDest(ruled.dest, { slug, folder: ruled.folder, root: rules.root }, ports))
+        const rendered = renderDest(ruled.dest, { slug, folder: ruled.folder, root: rules.root }, ports)
+        // dest 相对 root；{root}/... 是允许的旧写法，不能再把 root 拼第二次。
+        const normalizedRendered = rendered.replace(/\\/g, '/')
+        const normalizedRoot = rules.root.replace(/\\/g, '/')
+        const rootPrefix = normalizedRoot.endsWith('/') ? normalizedRoot : normalizedRoot + '/'
+        const destRel = normalizedRendered.startsWith(rootPrefix)
+          ? normalizedRendered.slice(rootPrefix.length)
+          : rendered
+        const to = join(rootAbs, destRel)
         return { kind: 'correct', code: 'unclassified->rules', source: 'rules', to, category: { key: ruled.key, folder: ruled.folder, naming: ruled.naming }, target, rules, rootAbs, tree }
       }
       return { kind: 'deny', code: 'need-allocate', target, category: ruled.parent, rules, rootAbs, tree }
@@ -215,10 +225,19 @@ export function decide(args: DecideArgs): Verdict {
     if (!instanceExists && priorDenials < 1) {
       return { kind: 'deny', code: 'need-allocate', target, category: cat, instanceName, rules, rootAbs, tree }
     }
-    if (!matchesNaming(cat.naming, stem) && priorDenials < 1) {
-      return { kind: 'deny', code: 'naming', target, category: cat, naming: cat.naming, stem, rules, rootAbs, tree }
+    const variantName = parts[2]
+    const variant = variantName === undefined ? undefined : variantFolderOf(cat, variantName)
+    if (variant === undefined) {
+      if (priorDenials >= 1) return { kind: 'pass', code: 'free-play' }
+      return {
+        kind: 'deny', code: 'unknown-variant', target, category: cat,
+        folder: variantName, instanceName, rules, rootAbs, tree,
+      }
     }
-    return { kind: 'pass', code: 'classified-rules', category: cat }
+    if (!matchesNaming(variant.naming, stem) && priorDenials < 1) {
+      return { kind: 'deny', code: 'naming', target, category: cat, naming: variant.naming, stem, rules, rootAbs, tree }
+    }
+    return { kind: 'pass', code: 'classified-rules', category: cat, variant }
   }
 
   if (!matchesNaming(cat.naming, stem) && priorDenials < 1) {

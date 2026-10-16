@@ -1,16 +1,15 @@
 /**
  * 拦截器接线测试——用真实临时工作区跑「放行 / 自动纠偏 / 打回」三条路径，
  * 外加守护测试：随包示例规则必须能被加载器正常解析。
- * @module dsh-file-guide/tests/intercept
+ * @module dsh-file-enhance/tests/intercept
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import yaml from 'js-yaml'
-import { installInterceptor } from '../src/intercept.js'
-import { RulesStore, normalizeRules } from '../src/rules.js'
-import { EXAMPLE_MD_RULES } from '../src/tools.js'
+import { installInterceptor } from '../src/folder-path/intercept.js'
+import { RulesStore, normalizeRules } from '../src/folder-path/rules.js'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 
 const EXAMPLE = readFileSync(new URL('../examples/md.yaml', import.meta.url), 'utf8')
@@ -19,8 +18,8 @@ let ws: string
 
 beforeEach(() => {
   ws = mkdtempSync(join(tmpdir(), 'file-guide-'))
-  mkdirSync(join(ws, '.dsh/file-rules'), { recursive: true })
-  writeFileSync(join(ws, '.dsh/file-rules/md.yaml'), EXAMPLE, 'utf8')
+  mkdirSync(join(ws, '.dsh/folder-path-rules'), { recursive: true })
+  writeFileSync(join(ws, '.dsh/folder-path-rules/md.yaml'), EXAMPLE, 'utf8')
   mkdirSync(join(ws, 'docs/guides'), { recursive: true })
   writeFileSync(join(ws, 'docs/guides/existing.md'), '# existing\n', 'utf8')
 })
@@ -64,6 +63,19 @@ describe('拦截器', () => {
     expect(reason).toContain('【可用分类】')
   })
 
+  it('指引单不再引用已删除的插件工具（工具面归零后只指原生 write / ask_user_question / yaml）', async () => {
+    const { call } = harness()
+    for (const target of ['notes.md', 'docs/未分类文档.md', 'docs/not_a_category/x.md']) {
+      const { decision } = await call(target)
+      if (decision.kind !== 'deny') continue
+      const reason = (decision as { reason: string }).reason
+      for (const gone of ['file_resolve', 'file_propose', 'file_check', 'file_rules_init']) {
+        expect(reason, `${target} 的指引单不该再提 ${gone}`).not.toContain(gone)
+      }
+      expect(reason).toContain('write')
+    }
+  })
+
   it('白名单文件（README.md）→ 放行', async () => {
     const { call } = harness()
     const { decision, nextCalled } = await call('README.md')
@@ -89,6 +101,16 @@ describe('拦截器', () => {
     expect(reason).toContain('已按项目规范写入：docs/guides/setup-guide.md')
     expect(reason).toContain('不要再用原路径重试')
     expect(readFileSync(join(ws, 'docs/guides/setup-guide.md'), 'utf8')).toBe('# setup\n')
+  })
+
+  it('纠偏目标已存在 → 不覆盖原文件', async () => {
+    const { call } = harness()
+    writeFileSync(join(ws, 'docs/guides/setup-guide.md'), '# original\n', 'utf8')
+    const { decision, nextCalled } = await call('docs/setup-guide.md', '# replacement\n')
+    expect(nextCalled).toBe(false)
+    expect(decision.kind).toBe('deny')
+    expect((decision as { reason: string }).reason).toContain('为避免覆盖')
+    expect(readFileSync(join(ws, 'docs/guides/setup-guide.md'), 'utf8')).toBe('# original\n')
   })
 
   it('方案 B（autoCorrect: false）→ 只打回并给出【正确路径】，文件不落盘', async () => {
@@ -140,6 +162,60 @@ describe('拦截器', () => {
     expect(nextCalled).toBe(true)
     expect(decision).toEqual({ kind: 'allow' })
   })
+
+  it('resolveRoot 端口：store 默认根错位时按解析根判定并落盘（桌面宿主场景）', async () => {
+    const wrong = mkdtempSync(join(tmpdir(), 'file-guide-wrong-'))
+    try {
+      // 模拟桌面宿主：store 构造时的 process.cwd() 是 profile 目录（错位根、无规则）。
+      const store = new RulesStore({ workspaceRoot: wrong })
+      let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
+      installInterceptor(store, (l) => { listener = l }, {
+        resolveRoot: async () => ws, // 按 agent 解析回真实会话工作区
+        writeFile: (p, c) => { writeFileSync(p, c) },
+        mkdirp: (p) => { mkdirSync(p, { recursive: true }) },
+      })
+      const exec = { name: 'write', arguments: { file_path: 'docs/login-guide.md', content: '# g\n' }, callId: 'c', agent: { id: 'a' } } as unknown as ToolExecution
+      const d = await listener!(exec, async () => ({ kind: 'allow' }))
+      expect(d.kind).toBe('deny')
+      expect(existsSync(join(ws, 'docs/guides/login-guide.md'))).toBe(true)     // 落在解析根下
+      expect(existsSync(join(wrong, 'docs/guides/login-guide.md'))).toBe(false) // 不落错位根
+    } finally {
+      rmSync(wrong, { recursive: true, force: true })
+    }
+  })
+
+  it('RulesStore.load 支持按调用传 root，缓存按 root 隔离', () => {
+    const wrong = mkdtempSync(join(tmpdir(), 'file-guide-wrong-'))
+    try {
+      // fallback:false：专测「文件按 root 隔离」这条旧语义（无文件即 undefined，不看内置默认）
+      const store = new RulesStore({ workspaceRoot: wrong, fallback: false })
+      expect(store.load('md')).toBeUndefined()                // 默认根（错位）无规则
+      const loaded = store.load('md', ws)
+      expect(loaded !== undefined && 'rules' in loaded ? loaded.rules.root : undefined).toBe('docs')
+      expect(store.load('md')).toBeUndefined()                // 缓存不串根
+      expect(store.types(ws)).toContain('md')
+      expect(store.types()).toEqual([])
+    } finally {
+      rmSync(wrong, { recursive: true, force: true })
+    }
+  })
+
+  it('代写前内容校验端口收到解析后的工作区根（root 为第一参）', async () => {
+    const seen: Array<{ root: string; abs: string }> = []
+    const store = new RulesStore({ workspaceRoot: ws })
+    let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
+    installInterceptor(store, (l) => { listener = l }, {
+      resolveRoot: async () => ws,
+      validateContent: (root, abs) => { seen.push({ root, abs }); return undefined },
+      writeFile: (p, c) => { writeFileSync(p, c) },
+      mkdirp: (p) => { mkdirSync(p, { recursive: true }) },
+    })
+    const exec = { name: 'write', arguments: { file_path: 'docs/login-guide.md', content: '# g\n' }, callId: 'c', agent: { id: 'a' } } as unknown as ToolExecution
+    await listener!(exec, async () => ({ kind: 'allow' }))
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.root).toBe(ws)
+    expect(seen[0]?.abs).toBe(join(ws, 'docs/guides/login-guide.md'))
+  })
 })
 
 describe('守护：随包示例规则可被加载器解析', () => {
@@ -158,10 +234,7 @@ describe('守护：随包示例规则可被加载器解析', () => {
     }
   })
 
-  it('file_rules_init 内置文本与 examples/md.yaml 语义一致（同一份规则）', () => {
-    const a = normalizeRules(yaml.load(EXAMPLE_MD_RULES), 'md')
-    const b = normalizeRules(yaml.load(EXAMPLE), 'md')
-    expect(JSON.stringify(Object.keys(a.categories).sort())).toBe(JSON.stringify(Object.keys(b.categories).sort()))
-    expect(a.root).toBe(b.root)
+  it('示例规则只剩 examples/md.yaml 这一份权威（内置副本随 file_rules_init 一起删除）', () => {
+    expect(normalizeRules(yaml.load(EXAMPLE), 'md').root).toBe('docs')
   })
 })

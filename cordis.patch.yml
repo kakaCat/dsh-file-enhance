@@ -1,8 +1,8 @@
-# dsh-file-guide 的装载层（bundle patch）。
+# dsh-file-enhance 的装载层（bundle patch）。
 #
-# 规则不在这里配：规则住工作区的 .dsh/file-rules/<ext>.yaml（每个文件类型一个文件）。
+# 规则不在这里配：规则住工作区的 .dsh/folder-path-rules/<ext>.yaml（每个文件类型一个文件）。
 # 本插件对该 yaml 目录做 mtime 热重载，改文件即生效，无需重启。
 - insert:
-    - id: dsh-file-guide
-      name: dsh-file-guide
+    - id: dsh-file-enhance
+      name: dsh-file-enhance
       config: {}

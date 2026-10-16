@@ -1,9 +1,9 @@
 {
-  "name": "dsh-file-guide",
+  "name": "dsh-file-enhance",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "DSH 文件规范插件：按 .dsh/file-rules/<ext>.yaml 约束 agent 新建文件（MVP 只管 .md）的落点与命名",
+  "description": "DSH 文件规范插件：按 .dsh/folder-path-rules/<ext>.yaml 约束 agent 新建文件（MVP 只管 .md）的落点与命名",
   "license": "MIT",
   "engines": {
     "node": ">=20"
@@ -25,6 +25,8 @@
     "README.md"
   ],
   "scripts": {
+    "sync:specs": "node scripts/sync-builtin-specs.mjs",
+    "prebuild": "pnpm sync:specs",
     "build": "tsdown",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
@@ -35,15 +37,18 @@
     }
   },
   "dependencies": {
-    "@deepseek-ai/dsh-tools": "0.2.0-rc.1",
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.11.0",
     "tsdown": "^0.22.14",
     "typescript": "^5.3.3",
     "vitest": "^2.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "^0.2.0-rc.1"
   }
 }

@@ -1,12 +1,12 @@
 /**
  * 判定链分支覆盖——每条分支对应一次需求讨论里冻结的规则。
- * @module dsh-file-guide/tests/decide
+ * @module dsh-file-enhance/tests/decide
  */
 import { describe, expect, it } from 'vitest'
 import { join } from 'node:path'
-import { decide, renderDest, nextAutoNumber, matchReality } from '../src/decide.js'
-import { normalizeRules } from '../src/rules.js'
-import type { Loaded, RuleSet, Tree } from '../src/types.js'
+import { decide, renderDest, nextAutoNumber, matchReality } from '../src/folder-path/decide.js'
+import { normalizeRules } from '../src/folder-path/rules.js'
+import type { Loaded, RuleSet, Tree } from '../src/folder-path/types.js'
 
 const WS = '/ws'
 const RAW = {
@@ -29,7 +29,7 @@ const RAW = {
 }
 
 const RULES: RuleSet = normalizeRules(RAW, 'md')
-const LOADED: Loaded = { rules: RULES, path: '/ws/.dsh/file-rules/md.yaml' }
+const LOADED: Loaded = { rules: RULES, path: '/ws/.dsh/folder-path-rules/md.yaml' }
 
 const tree = (dirs: Array<{ name: string; subdirs?: string[] }>, files: string[] = []): Tree => ({
   exists: true,
@@ -123,6 +123,10 @@ describe('集合型：实例轴', () => {
     const v = run('docs/projects/PRJ-0001/design/login-flow.md', { tree: tree([{ name: 'projects', subdirs: ['PRJ-0001'] }]) })
     expect(v).toMatchObject({ kind: 'pass', code: 'classified-rules' })
   })
+  it('实例存在但变体目录未登记 → 拦截', () => {
+    const v = run('docs/projects/PRJ-0001/unknown/login.md', { tree: tree([{ name: 'projects', subdirs: ['PRJ-0001'] }]) })
+    expect(v).toMatchObject({ kind: 'deny', code: 'unknown-variant' })
+  })
   it('实例不存在 → 要求先分配编号', () => {
     const v = run('docs/projects/PRJ-0009/design/login.md', { tree: tree([{ name: 'projects', subdirs: ['PRJ-0001'] }]) })
     expect(v).toMatchObject({ kind: 'deny', code: 'need-allocate' })
@@ -131,11 +135,27 @@ describe('集合型：实例轴', () => {
     const v = run('docs/projects/xx/design/login.md', { tree: tree([{ name: 'projects', subdirs: ['xx'] }]) })
     expect(v).toMatchObject({ kind: 'deny', code: 'bad-instance' })
   })
+  it('变体使用自己的 naming，而不是父分类命名', () => {
+    const rules = normalizeRules({
+      root: 'docs',
+      categories: {
+        project: {
+          folder: 'projects', kind: 'collection', naming: 'kebab-case',
+          instance: { param: 'project_id', pattern: '^PRJ-\\d{4}$' },
+          variants: { design: { naming: 'PascalCase', dest: 'projects/{project_id}/design/{slug}.md' } },
+        },
+      },
+    }, 'md')
+    const loaded: Loaded = { rules, path: '/ws/.dsh/folder-path-rules/md.yaml' }
+    const reality = tree([{ name: 'projects', subdirs: ['PRJ-0001'] }])
+    expect(run('docs/projects/PRJ-0001/design/login-flow.md', { loaded, tree: reality })).toMatchObject({ kind: 'deny', code: 'naming', naming: 'PascalCase' })
+    expect(run('docs/projects/PRJ-0001/design/LoginFlow.md', { loaded, tree: reality })).toMatchObject({ kind: 'pass', code: 'classified-rules' })
+  })
 })
 
 describe('规则文件非法', () => {
   it('首次拦截并指名错误；第二次放行（不因坏规则卡死 agent）', () => {
-    const bad: Loaded = { error: 'root 缺失', path: '/ws/.dsh/file-rules/md.yaml' }
+    const bad: Loaded = { error: 'root 缺失', path: '/ws/.dsh/folder-path-rules/md.yaml' }
     expect(run('docs/x.md', { loaded: bad })).toMatchObject({ kind: 'deny', code: 'rules-invalid' })
     expect(run('docs/x.md', { loaded: bad, priorDenials: 1 })).toMatchObject({ kind: 'pass', code: 'free-play' })
   })
@@ -149,6 +169,14 @@ describe('渲染与匹配原语', () => {
   it('renderDest 支持 auto_number / slug', () => {
     expect(renderDest('adr/{auto_number:4}-{slug}.md', { slug: 'cache' }, { rootAbs: '/ws/docs', listNames: () => ['0007-x.md'] }))
       .toBe('adr/0008-cache.md')
+  })
+  it('dest 以 {root} 开头时不会重复拼接主目录', () => {
+    const rules = normalizeRules({
+      root: 'docs',
+      categories: { guides: { folder: 'guides', keywords: ['guide'], dest: '{root}/guides/{slug}.md' } },
+    }, 'md')
+    const v = run('docs/setup-guide.md', { loaded: { rules, path: '/ws/.dsh/folder-path-rules/md.yaml' } })
+    expect(v).toMatchObject({ kind: 'correct', to: join(WS, 'docs/guides/setup-guide.md') })
   })
   it('matchReality 支持单复数', () => {
     expect(matchReality(tree([{ name: 'guides' }]), 'setup-guide.md')?.name).toBe('guides')
