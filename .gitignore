@@ -4,3 +4,6 @@ dist/
 .DS_Store
 .vitest/
 coverage/
+
+# 本仓库自己的工作区规则（冷启动垫片自动生成；要入库分享时删掉这行并 git add .dsh/）
+.dsh/
