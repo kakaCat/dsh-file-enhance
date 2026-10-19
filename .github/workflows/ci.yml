@@ -17,7 +17,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # tsdown 的引擎要求是 ^22.18.0 || >=24.11.0，Node 20 会在 build 阶段失败；
+          # dist 产物本身 target node20，运行时兼容性不受影响（见 package.json engines）。
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies

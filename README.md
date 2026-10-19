@@ -393,6 +393,10 @@ pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/
 pnpm build       # tsdown → dist/
 ```
 
+> **Node 版本**：`pnpm build` 需要 **Node ≥22.18**（tsdown 的引擎要求 `^22.18.0 || >=24.11.0`；Node 20 会在构建阶段报错）。
+> 产物 `dist/` 的目标是 Node 20（`tsdown target: node20`），所以**运行时**仍然支持 Node ≥20，见 `engines`。
+> `pnpm pack` / `npm publish` 前会自动跑 `build`（`prepack`），dist 不会漏。
+
 ```
 src/index.ts               插件入口（只 inject tools，挂两个监听器；不注册任何工具）
 

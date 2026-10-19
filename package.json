@@ -46,6 +46,7 @@
   "scripts": {
     "sync:specs": "node scripts/sync-builtin-specs.mjs",
     "prebuild": "pnpm sync:specs",
+    "prepack": "pnpm build",
     "build": "tsdown",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
