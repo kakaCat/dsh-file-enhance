@@ -1,9 +1,20 @@
+# 依赖与构建产物（dist 由 pnpm build 生成，不入库）
 node_modules/
 dist/
-*.log
-.DS_Store
+*.tgz
+
+# 测试与运行产物
 .vitest/
 coverage/
+*.log
+*.tsbuildinfo
+
+# 编辑器 / 操作系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
 
 # 本仓库自己的工作区规则（冷启动垫片自动生成；要入库分享时删掉这行并 git add .dsh/）
 .dsh/

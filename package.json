@@ -5,6 +5,25 @@
   "type": "module",
   "description": "DSH 文件规范插件：按 .dsh/folder-path-rules/<ext>.yaml 约束 agent 新建文件（MVP 只管 .md）的落点与命名",
   "license": "MIT",
+  "author": "kakaCat <253834671@qq.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kakaCat/dsh-file-enhance.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kakaCat/dsh-file-enhance/issues"
+  },
+  "homepage": "https://github.com/kakaCat/dsh-file-enhance#readme",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "plugin",
+    "agent",
+    "file-management",
+    "documentation",
+    "markdown"
+  ],
   "engines": {
     "node": ">=20"
   },
@@ -49,6 +68,6 @@
     "vitest": "^2.0.0"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-tools": "^0.2.0-rc.1"
+    "@deepseek-ai/dsh-tools": "^0.2.0-rc.1 || ^0.2.1-alpha.2"
   }
 }

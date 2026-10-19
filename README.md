@@ -1,6 +1,15 @@
 # dsh-file-enhance
 
+[![CI](https://github.com/kakaCat/dsh-file-enhance/actions/workflows/ci.yml/badge.svg)](https://github.com/kakaCat/dsh-file-enhance/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+
 DSH 插件：**让 agent 按项目自己的规范创建文件**——不该放哪就不放哪，不该长什么样就不长什么样。
+
+## 前置了解
+
+- **DSH 是什么**：DeepSeek Harness，agent 的宿主运行时。本插件是一条标准的 **Cordis 插件**，经 [cordis.patch.yml](cordis.patch.yml) 的 bundle patch 装载，只 `inject: ['tools']`、零工具注册。
+- **宿主版本**：`@deepseek-ai/dsh-tools`：`^0.2.0-rc.1 || ^0.2.1-alpha.2`（与 `peerDependencies` 同口径）。工作区根优先用 `workingDirectory` 服务（dsh ≥0.2.1-alpha.2），更早版本回落 `exec.agent.session.header.cwd`，最后回落 `process.cwd()`。
+- **不需要发布到 npm 也能装**：`pnpm build` 出的目录，或 `pnpm pack` 出的 tarball，直接喂给宿主的 `plugin_manager` 即可（见下文「安装」）。
 
 ## 定位：行为增强，不是能力增强
 
@@ -320,14 +329,19 @@ rules:
 |---|---|---|
 | `autoCorrect` | `true` | 路径未分类时由插件代写到规范路径（落点已存在则不覆盖）；设 `false` 改为打回让 agent 重试 |
 | `contentValidate` | `true` | 是否挂内容格式校验（`post-execute`） |
+| `scaffoldDefault` | `true` | 冷启动垫片：工作区没有规则时回落内置默认继续判定，并把默认规则落盘到 `.dsh/`；`false` = 无规则即放行（旧行为） |
 
-安装：
+安装（不需要发布到 npm）：
 
 ```bash
-# 在 DSH 里（plugin_manager）：install_bundle <本包路径或打包产物>
-# 本地开发：
-pnpm install && pnpm build     # → dist/index.mjs
+git clone git@github.com:kakaCat/dsh-file-enhance.git
+cd dsh-file-enhance
+pnpm install && pnpm build       # → dist/index.mjs
+pnpm pack                        # 可选：产出 dsh-file-enhance-<version>.tgz
 ```
+
+然后在 DSH 会话里用 `plugin_manager` → `install_bundle`，target 指向上面的目录或 tarball。
+插件装载后的行为由「配置表 + 工作区 `.dsh/` 规则」决定，不依赖任何全局安装。
 
 冷启动（两步，都是复制）：
 
@@ -375,7 +389,7 @@ cp -r examples/file-format-specs .dsh/file-format-specs     # 内容规范（按
 
 ```bash
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（6 文件 / 107 用例）
+pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（8 文件 / 130 用例）
 pnpm build       # tsdown → dist/
 ```
 
@@ -416,3 +430,5 @@ test/                               vitest：decide / intercept / rules / format
 - [模板文档设计](docs/template-authoring.md)——模板与规则的结构契约、占位符语法、五套示例的设计来源
 - [格式校验设计](docs/content-validation-design.md)——匹配、解析、原语、规则引擎的实现细节
 - [测试方案](docs/test-plan.md)——覆盖范围与实测记录
+
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

@@ -3,7 +3,7 @@
 > **2026-10-15 变更**：插件**工具面归零**——`file_resolve` / `file_propose` / `file_check` / `file_rules_init`
 > 四个工具与 `src/folder-path/tools.ts` 已删除（理由见 README「工具面：零」）。本文涉及这四个工具的条目为
 > **历史记录**；现状替代：宿主的 `ask_user_question`（问用户）+ 原生 `write`（改规则 yaml）。
-> 用例基线：`pnpm test` = 6 个文件 / **107 条用例全绿**（decide 24、rules 10、intercept 17、index 3、format 51、docs 2）。
+> 用例基线：`pnpm test` = 8 个文件 / **130 条用例全绿**（decide 24、rules 10、intercept 17、index 3、format 51、docs 2、scaffold 16、scaffold-specs 7）。
 
 > 范围：`folder-path`（放哪、叫什么）+ `content-format`（内容长什么样）+ 二者在 `tools/pre-execute` / `tools/post-execute` 上的接线。
 > 本方案不写用例步骤——用例住在 `test/*.test.ts`（见 `docs/content-validation-design.md` §9）。
