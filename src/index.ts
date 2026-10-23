@@ -26,6 +26,7 @@ import { buildSkeleton } from './content-format/skeleton.js'
 import { validateDocument } from './content-format/validate.js'
 import { installPostCheck } from './content-format/post-check.js'
 import { extKeyOf } from './folder-path/paths.js'
+import { createFileEnhanceService } from './host/service.js'
 
 export const name = 'dsh-file-enhance'
 
@@ -72,6 +73,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     inject?: (services: string[], cb: (c: Record<string, unknown>) => void) => void
     on?: (name: string, listener: unknown) => unknown
     tools?: { register: (tool: unknown) => unknown }
+    provide?: (name: string, value: unknown) => void
   }
   const logger = anyCtx.logger?.(name)
   const store = new RulesStore({ workspaceRoot: process.cwd(), logger, fallback: config.scaffoldDefault !== false })
@@ -212,7 +214,33 @@ export function apply(ctx: Context, config: Config = {}): void {
     }
     logger?.info?.(`已装载（纯监听器，无自有工具）：规则目录 ${store.dir}（${store.types().join(', ') || '暂无规则文件'}）`)
   })
+
+  // Host 服务：按 profile **主动预置/读取/写入**规范，而不是只靠写文件被拦下才触发垫片。
+  // 入口只负责创建并注册；三个能力的实现全部复用 RulesStore / FormatStore（见 host/service.ts）。
+  const service = createFileEnhanceService({ workspaceRoot: process.cwd() })
+  if (typeof anyCtx.provide === 'function') {
+    anyCtx.provide('fileEnhance', service)
+    logger?.debug?.('已提供 fileEnhance 服务（ensure / status / provision）')
+  }
 }
 
 export { RulesStore } from './folder-path/rules.js'
 export { decide } from './folder-path/decide.js'
+export {
+  createFileEnhanceService,
+  FileEnhanceError,
+  FILE_ENHANCE_INVALID_INPUT,
+  FILE_ENHANCE_IO_ERROR,
+} from './host/service.js'
+export type {
+  EnsurePart,
+  EnsureResult,
+  FileEnhanceProfile,
+  FileEnhanceService,
+  FileEnhanceServiceOptions,
+  FormatProvision,
+  ProvisionResult,
+  RuleProvision,
+  StatusPart,
+  StatusResult,
+} from './host/service.js'
