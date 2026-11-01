@@ -231,6 +231,102 @@ describe('拦截器', () => {
     await new Promise((resolve) => setTimeout(resolve, 40))        // 让记忆过期
     expect((await call('docs/未分类文档.md')).kind).toBe('deny')   // 过期后重新计一次，且过期条目已被清理
   })
+
+  it('代写失败：打回并附指引单，不抛异常也不留半个文件', async () => {
+    const store = new RulesStore({ workspaceRoot: ws })
+    let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
+    installInterceptor(store, (l) => { listener = l }, {
+      writeFile: () => { throw new Error('EACCES: permission denied') },
+    })
+    const exec = { name: 'write', arguments: { file_path: 'docs/指南-代写失败.md', content: '# x\n' }, callId: 'c', agent: { id: 'a1' } } as unknown as ToolExecution
+    const decision = await listener!(exec, async () => ({ kind: 'allow' }))
+
+    expect(decision.kind).toBe('deny')
+    const reason = (decision as { reason: string }).reason
+    expect(reason).toContain('自动纠偏失败')
+    expect(reason).toContain('EACCES')
+    expect(reason).toContain('【可用分类】')                       // 失败也把指引单给全
+    expect(existsSync(join(ws, 'docs/guides/指南-代写失败.md'))).toBe(false)
+  })
+
+  it('规则 dest 越界：拒写，且不会把文件写到工作区外（路径穿越）', async () => {
+    writeFileSync(join(ws, '.dsh/folder-path-rules/md.yaml'), [
+      'type: md',
+      'root: docs',
+      'categories:',
+      '  guides:',
+      '    folder: guides',
+      '    keywords: [指南]',
+      '    dest: "../../l4-escape/{slug}.md"',
+    ].join('\n'), 'utf8')
+    const outside = join(ws, '..', 'l4-escape')
+    rmSync(outside, { recursive: true, force: true })
+
+    const { call } = harness()
+    const { decision, nextCalled } = await call('docs/指南-越界.md')
+
+    expect(nextCalled).toBe(false)
+    expect(decision.kind).toBe('deny')
+    expect((decision as { reason: string }).reason).toContain('越出工作区')
+    expect(existsSync(outside)).toBe(false)
+  })
+
+  it('规则 root 越界：拒写并说清原因，不跟着规则扫工作区外', async () => {
+    writeFileSync(join(ws, '.dsh/folder-path-rules/md.yaml'), [
+      'type: md',
+      'root: ../',
+      'categories:',
+      '  guides:',
+      '    folder: guides',
+      '    keywords: [指南]',
+      '    dest: "guides/{slug}.md"',
+    ].join('\n'), 'utf8')
+
+    const { call } = harness()
+    const { decision } = await call('docs/指南-root越界.md')
+
+    expect(decision.kind).toBe('deny')
+    expect((decision as { reason: string }).reason).toContain('主目录越出工作区')
+  })
+
+  it('instance.pattern 写坏：规则判非法并打回一次，不抛异常', async () => {
+    writeFileSync(join(ws, '.dsh/folder-path-rules/md.yaml'), [
+      'type: md',
+      'root: docs',
+      'categories:',
+      '  project:',
+      '    folder: projects',
+      '    kind: collection',
+      '    instance:',
+      '      pattern: "^PRJ-[0-9"',        // 左括号没闭合
+      '    variants:',
+      '      plan:',
+      '        keywords: [计划]',
+      '        dest: "projects/{project_id}/plan/{slug}.md"',
+    ].join('\n'), 'utf8')
+
+    const { call } = harness()
+    const { decision } = await call('docs/projects/PRJ-0001/plan/计划.md')
+
+    expect(decision.kind).toBe('deny')
+    expect((decision as { reason: string }).reason).toContain('instance.pattern')
+  })
+
+  it('判定链内部异常：降级放行，不阻断写文件', async () => {
+    const warnings: string[] = []
+    const broken = {
+      workspaceRoot: ws,
+      load: () => { throw new Error('boom: 加载器炸了') },
+    } as unknown as RulesStore
+    let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
+    installInterceptor(broken, (l) => { listener = l }, { logger: { warn: (m) => warnings.push(m) } })
+
+    const exec = { name: 'write', arguments: { file_path: 'docs/指南-异常.md', content: '# x\n' }, callId: 'c', agent: { id: 'a1' } } as unknown as ToolExecution
+    const decision = await listener!(exec, async () => ({ kind: 'allow' }))
+
+    expect(decision).toEqual({ kind: 'allow' })
+    expect(warnings.some((w) => w.includes('内部异常'))).toBe(true)
+  })
 })
 
 describe('守护：随包示例规则可被加载器解析', () => {

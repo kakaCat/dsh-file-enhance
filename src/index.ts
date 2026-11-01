@@ -189,6 +189,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     installInterceptor(store, (listener) => reg.call(toolsCtx, 'tools/pre-execute', listener), {
       autoCorrect: config.autoCorrect,
       resolveRoot,
+      logger,
       validateContent: contentEnabled ? validateContentForWrite : undefined,
       ...(config.scaffoldDefault === false ? {} : {
         scaffold: (root: string, extKey: string) => {

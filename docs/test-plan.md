@@ -3,8 +3,8 @@
 > **2026-10-15 变更**：插件**工具面归零**——`file_resolve` / `file_propose` / `file_check` / `file_rules_init`
 > 四个工具与 `src/folder-path/tools.ts` 已删除（理由见 README「工具面：零」）。本文涉及这四个工具的条目为
 > **历史记录**；现状替代：宿主的 `ask_user_question`（问用户）+ 原生 `write`（改规则 yaml）。
-> 用例基线（2026-11-01 复核）：`pnpm test` = **9 个文件 / 152 条用例全绿**
-> （decide 24、rules 10、intercept 18、index 3、format 54、docs 2、scaffold 16、scaffold-specs 7、service 18）。
+> 用例基线（2026-11-01 复核）：`pnpm test` = **9 个文件 / 159 条用例全绿**
+> （decide 24、rules 10、intercept 23、index 3、format 56、docs 2、scaffold 16、scaffold-specs 7、service 18）。
 
 > 范围：`folder-path`（放哪、叫什么）+ `content-format`（内容长什么样）+ 二者在 `tools/pre-execute` / `tools/post-execute` 上的接线。
 > 本方案不写用例步骤——用例住在 `test/*.test.ts`（见 `docs/content-validation-design.md` §9）。
@@ -54,7 +54,7 @@
 | A4 | 主目录下·子目录 | 现实存在目录 → `classified-reality`；规则分类 + 命名合规 → `classified-rules`；命名违规 → `naming`；都不中 → `unknown-category` | ✅ |
 | A5 | 主目录下·未分类 | 现实目录优先 → `correct/reality`；规则兜底 → `correct/rules`；`adr` 走 `auto_number`；集合型变体 → `need-allocate`；都不中 → `unclassified` | ✅ |
 | A6 | 集合型实例轴 | 实例存在 + 变体 → 放行；实例不存在 → `need-allocate`；编号格式非法 → `bad-instance` | ✅ |
-| A7 | 规则文件非法 | `rules-invalid` 拦截并指名错误 → 第二次放行（不因坏规则卡死 agent） | ✅ |
+| A7 | 规则文件非法 | `rules-invalid` 拦截并指名错误 → 第二次放行（不因坏规则卡死 agent）；**`instance.pattern` 写坏在加载期就被点名** | ✅ 2 条 |
 | A8 | 代写端口 | 注入 `writeFile` 替身，验证落点 = 规范路径、内容原样 | ✅ 1 条 |
 | A9 | 二次判定与记忆 | 改旧文件不拦；同一目标第二次放行；`denialTtlMs` 超时视为新尝试；**多 agent 计数隔离**（key = `agent:id`） | ⚠️ 仅「多 agent 计数隔离」未测（超时已补） |
 | A10 | 指引单文案 | 根目录禁令含【可用分类】；方案 B 含【正确路径】【请重试】；方案 A 含「已按项目规范写入」 | ✅ 片段断言 |
@@ -70,7 +70,7 @@
 | B4 | 原语补集 | `frontmatterPattern` / `sectionsForbidden` / `sectionsServes` / `forbiddenText` / `requiredText` / `size` / `templateSections` | ⚠️ 无直接用例（部分靠示例守护间接覆盖） |
 | B5 | 规则引擎 | 条件树 `all/any/not/path`、量词 `each+where`、`count`、`fn`；`when` 守卫；`derive` 前向链；用户 expr / script；`warning` 不阻断 | ✅ |
 | B6 | 动态代码沙箱 | expr 真假判定；script 返回 `undefined/true/null/[]` 通过、`string`/对象/数组 违规；**抛错 → 一条「函数执行失败」不崩**；**死循环 → 超时截断** | ✅ |
-| B7 | delta 归责 | `before` 已有违规不重报；`before=null`（新建）等价 strict；`edit` 整篇校验只算新增 | ✅ 前两条 |
+| B7 | delta 归责 | `before` 已有违规不重报；`before=null`（新建）等价 strict；**`edit` 原样重写 → 放行** | ✅ 全 |
 | B8 | 反馈契约 | 合规 → `accept` **零正文**；违规 → `block` 一次报全 + 行号 + 目标结构（template 全文 / 骨架）+ 剩余次数 | ✅ |
 | B9 | 重试与终止 | 按 `agent + canonical path` 独立计数；`max_attempts` 用尽 → `on_exhausted=allow` 放行并附警告 | ✅ |
 | B10 | 终止与模式的其余档 | `on_exhausted: block`、`mode: off`、`diff_mode: strict` 显式用例、`sameContent` 追加「内容未变」 | ⚠️ 部分覆盖（`mode: warn`、`enforce_on` 已测） |
@@ -130,10 +130,10 @@ pnpm build       # tsdown → dist/index.mjs
 
 | 优先级 | 缺口 | 为什么危险 |
 |---|---|---|
-| **P0** | 代写失败降级（`writeFile` 抛错 → `deny` + 指引单 + `bump`）未测 | 无权限 / 目录冲突时 agent 会拿到什么，未知 |
-| **P0** | post 钩子的 `edit` 分支（`op=update`、`before≠null`）未测 | `edit` 是日常路径，delta 归责写错就是大面积误伤 |
-| **P0** | C1 校验异常降级为放行 | 校验器一旦抛错就阻断写文件，比不校验更糟 |
-| **P0** | C2 路径穿越 | 规范路径算到工作区之外是越权写入 |
+| ~~**P0**~~ | ~~代写失败降级（`writeFile` 抛错 → `deny` + 指引单 + `bump`）未测~~ | **已关闭**：补测 + 断言「失败也把指引单给全、不落半个文件」 |
+| ~~**P0**~~ | ~~post 钩子的 `edit` 分支（`op=update`、`before≠null`）未测~~ | **已关闭**：`edit` 原样重写的 delta 归责有专测 |
+| ~~**P0**~~ | ~~C1 校验异常降级为放行~~ | **已关闭**：两侧监听器都包了 try/catch 降级 + 告警日志，各有专测 |
+| ~~**P0**~~ | ~~C2 路径穿越~~ | **已关闭**：`dest` / `root` 越出工作区一律拒写并有专测（实现见 `intercept.ts` 的 `isInside` 守卫） |
 | P1 | A9 多 agent 计数隔离（`denialTtlMs` 超时已补测） | 记忆串味会让「第二次放行」提前或滞后 |
 | P1 | B10 `on_exhausted: block` / `off` / `strict` / `sameContent` | `warn` 与 `enforce_on` 已补测，其余声明行为仍缺显式用例 |
 | P1 | B4 七个原语无直接用例 | 靠示例间接覆盖，改坏一个不一定会红 |

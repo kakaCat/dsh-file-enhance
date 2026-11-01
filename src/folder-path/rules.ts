@@ -117,9 +117,19 @@ export function normalizeRules(doc: unknown, extKey: string): RuleSet {
     }
     if (kind === 'collection') {
       const inst = (r.instance ?? {}) as RawDoc
+      const pattern = typeof inst.pattern === 'string' ? inst.pattern : undefined
+      // 加载期就把非法正则拦掉：过去它会在 decide() 里 `new RegExp(...)` 抛错，
+      // 一路穿过 pre-execute 监听器，表现是「写文件直接失败」而不是「规则写错了」。
+      if (pattern !== undefined) {
+        try {
+          new RegExp(pattern)
+        } catch (err) {
+          throw new Error(`分类 ${key} 的 instance.pattern 不是合法正则（${pattern}）——${String((err as Error)?.message ?? err)}`)
+        }
+      }
       cat.instance = {
         param: typeof inst.param === 'string' ? inst.param : 'project_id',
-        pattern: typeof inst.pattern === 'string' ? inst.pattern : undefined,
+        pattern,
         acquire: inst.acquire === 'auto' ? 'auto' : 'none',
         scaffold: Array.isArray(inst.scaffold) ? inst.scaffold.map(String) : [],
       }

@@ -302,6 +302,28 @@ describe('post-execute 集成', () => {
     for (let i = 0; i < 5; i++) await call('write', 'docs/prd.md', '# 缺章节\n')
     expect(logs.some((l) => l.startsWith('info:') && l.includes('预算用尽'))).toBe(true)
   })
+  it('edit：只拦本次新增违规（delta），旧文件的历史问题不背锅', async () => {
+    const { call } = harness()
+    const bad = '# 缺章节\n'
+    expect((await call('write', 'docs/prd.md', bad, null)).kind).toBe('block')  // 新建：等价 strict
+    // 原样改一遍：before 里已有的两条违规不算本次新增 → 放行
+    expect((await call('edit', 'docs/prd.md', bad, bad)).kind).toBe('accept')
+  })
+  it('校验内部异常：降级放行，不阻断已落盘的文件', async () => {
+    const logs: string[] = []
+    const broken = { match: () => { throw new Error('boom: 匹配器炸了') } } as unknown as FormatStore
+    let listener: any
+    installPostCheck(broken, (l) => { listener = l }, {
+      workspaceRoot: ws,
+      logger: { warn: (m: string) => logs.push('warn:' + m) },
+    })
+    const exec = { name: 'write', arguments: { file_path: 'docs/prd.md' }, agent: { id: 'a1' } }
+    const result = { isError: false, value: { path: join(ws, 'docs/prd.md'), operation: 'create', before: null, after: '# x\n' } }
+    const decision = await listener(exec, result, async () => ({ kind: 'accept' }))
+
+    expect(decision).toEqual({ kind: 'accept' })
+    expect(logs.some((l) => l.includes('内部异常'))).toBe(true)
+  })
 })
 
 describe('示例规范守护', () => {

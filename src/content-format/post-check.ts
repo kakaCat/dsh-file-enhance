@@ -42,7 +42,8 @@ export function installPostCheck(store: FormatStore, register: PostRegister, dep
   const attempts = new AttemptStore(deps.attemptTtlMs)
   const textBlock = (text: string): { type: 'text'; text: string } => ({ type: 'text', text })
 
-  const listener = async (
+  /** 实际处理逻辑；外层 listener 负责把任何异常兜成「放行」。 */
+  const handle = async (
     exec: ToolExecution,
     result: ToolExecutionResult,
     next: () => Promise<PostToolDecision>,
@@ -115,6 +116,25 @@ export function installPostCheck(store: FormatStore, register: PostRegister, dep
     // accept 但带提示 = warn 模式、只有 warning、或 on_exhausted=allow 的放行，三种要能区分。
     deps.logger?.info?.(`内容校验：放行但提示（${spec.mode === 'warn' ? 'mode=warn' : report.newErrors.length === 0 ? '仅 warning' : '预算用尽'}） ${summary}`)
     return { kind: 'accept', content: [textBlock(decision.text)] }
+  }
+
+  /**
+   * 对外注册的监听器：**任何内部异常都必须降级为放行**。
+   *
+   * 文件已经落盘，校验只是加强；插件因为自己的 bug（坏规则、坏正则、模板读失败的新姿势）
+   * 把写文件整条链路带崩，比不校验糟糕得多。异常记一条 warn，然后走 next()。
+   */
+  const listener = async (
+    exec: ToolExecution,
+    result: ToolExecutionResult,
+    next: () => Promise<PostToolDecision>,
+  ): Promise<PostToolDecision> => {
+    try {
+      return await handle(exec, result, next)
+    } catch (err) {
+      deps.logger?.warn?.(`内容校验：内部异常，本次放行（不影响已落盘文件）——${String((err as Error)?.message ?? err)}`)
+      return next()
+    }
   }
 
   register(listener)

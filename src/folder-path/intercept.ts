@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, relative } from 'node:path'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import { decide } from './decide.js'
-import { extKeyOf, toAbs } from './paths.js'
+import { extKeyOf, isInside, toAbs } from './paths.js'
 import { renderCorrection, renderGuidance } from './guidance.js'
 import { scanReality, listNames } from './scan.js'
 import type { RulesStore } from './rules.js'
@@ -68,6 +68,8 @@ export interface InterceptorDeps {
    * 回调不改变本次判定走向——回落内置默认时本次仍按默认规则继续判定。
    */
   scaffold?: (workspaceRoot: string, extKey: string) => void
+  /** 判定链内部异常时的告警出口（异常一律降级为放行，不阻断写文件）。 */
+  logger?: { info?: (m: string) => void; warn?: (m: string) => void; debug?: (m: string) => void }
 }
 
 export interface ContentValidationResult {
@@ -114,7 +116,8 @@ export function installInterceptor(
     return Date.now() - prev.at < ttl ? prev.count : 0
   }
 
-  const listener = async (exec: ToolExecution, next: () => Promise<PreToolDecision>): Promise<PreToolDecision> => {
+  /** 实际判定逻辑；外层 listener 把任何异常兜成放行。 */
+  const handle = async (exec: ToolExecution, next: () => Promise<PreToolDecision>): Promise<PreToolDecision> => {
     if (!WRITE_TOOLS.has(exec.name)) return next()
     const args = exec.arguments as { file_path?: unknown; content?: unknown } | undefined
     const rawPath = args?.file_path
@@ -141,8 +144,17 @@ export function installInterceptor(
 
     const rules = 'rules' in loaded ? loaded.rules : undefined
     const rootAbs = rules !== undefined ? toAbs(workspaceRoot, rules.root) : undefined
-    const tree = rootAbs !== undefined ? scanReality(rootAbs) : undefined
     const key = `${exec.agent?.id ?? 'agent'}:${workspaceRoot}:${target}`
+    // root 被写成 ../.. 之类：规则已经指到工作区外，扫目录与落点都不该跟出去。
+    if (rootAbs !== undefined && !isInside(workspaceRoot, rootAbs)) {
+      bump(key)
+      return {
+        kind: 'deny',
+        reason: `规则的主目录越出工作区：${rules?.root ?? ''}（解析为 ${rootAbs}）。\n\n`
+          + '请把 .dsh/folder-path-rules/*.yaml 的 root 改回工作区内的目录（如 docs），本次未做任何写入。',
+      }
+    }
+    const tree = rootAbs !== undefined ? scanReality(rootAbs) : undefined
     const verdict = decide({
       target, workspaceRoot, loaded, tree,
       priorDenials: priorOf(key), listNames,
@@ -170,6 +182,16 @@ export function installInterceptor(
       }
     }
     // 方案 A（默认）：宿主不允许改工具参数，故由监听器按规范路径把内容写下去，再向 agent 回执实际落点。
+    // 落点必须留在工作区内：dest 模板里写 ../.. 时 join() 会把它带出去（C2 路径穿越）。
+    // 宁可拒写并说清原因，也不能拿项目规则把文件写到工作区外。
+    if (!isInside(workspaceRoot, verdict.to)) {
+      bump(key)
+      return {
+        kind: 'deny',
+        reason: `规则渲染出的落点越出工作区，本次未写入：${verdict.to}\n\n`
+          + '请检查 .dsh/folder-path-rules/*.yaml 里该分类的 dest 模板（不允许 ../ 或绝对路径）。',
+      }
+    }
     // 原目标不存在不代表纠偏目标也不存在；代写绝不能覆盖已有文档。
     if (exists(verdict.to)) {
       bump(key)
@@ -226,6 +248,21 @@ export function installInterceptor(
             { suggestedPath: relative(workspaceRoot, verdict.to), source: verdict.source },
           ),
       }
+    }
+  }
+
+  /**
+   * 对外注册的监听器：判定链内部异常一律降级为放行。
+   *
+   * pre-execute 抛错会让整次 write 失败——插件因为自己的 bug（坏规则、坏正则）挡住用户写文件，
+   * 比「这一单没按规范落位」糟糕得多。异常记一条 warn，交给宿主原生 write。
+   */
+  const listener = async (exec: ToolExecution, next: () => Promise<PreToolDecision>): Promise<PreToolDecision> => {
+    try {
+      return await handle(exec, next)
+    } catch (err) {
+      deps.logger?.warn?.(`路径判定：内部异常，本次放行——${String((err as Error)?.message ?? err)}`)
+      return next()
     }
   }
 

@@ -37,6 +37,18 @@ export interface DestPorts {
 }
 
 /**
+ * 实例编号匹配。正则本身写坏时按「不匹配」处理——加载期 normalizeRules 已经会拒绝非法
+ * pattern，这里是兜底：判定链是纯函数，绝不能因为一份坏规则抛异常把写文件整条链路带崩。
+ */
+export function instancePatternMatches(pattern: string, value: string): boolean {
+  try {
+    return new RegExp(pattern).test(value)
+  } catch {
+    return false
+  }
+}
+
+/**
  * 渲染 dest 模板。占位符：`{root}` `{folder}` `{slug}` `{project_id}` `{auto_number:N}`。
  * `auto_number` 需要 listNames 端口（读目标目录现有文件名），目录取 dest 里它前面的路径段。
  */
@@ -217,7 +229,7 @@ export function decide(args: DecideArgs): Verdict {
     if (inst === undefined || instanceName === undefined) {
       return { kind: 'deny', code: 'need-allocate', target, category: cat, rules, rootAbs, tree }
     }
-    if (inst.pattern !== undefined && !new RegExp(inst.pattern).test(instanceName)) {
+    if (inst.pattern !== undefined && !instancePatternMatches(inst.pattern, instanceName)) {
       return { kind: 'deny', code: 'bad-instance', target, category: cat, instanceName, rules, rootAbs, tree }
     }
     const folderEntry = (tree?.dirs ?? []).find((d) => d.name === cat.folder)
