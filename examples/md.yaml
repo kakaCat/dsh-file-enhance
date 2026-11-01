@@ -45,6 +45,11 @@ categories:
   project:
     folder: projects
     kind: collection
+    # ⚠️ 关键词里的 prd / 需求 / 设计 / 计划 会**先于内容规范**命中：
+    #    「docs/prd-登录.md」这类文件会被判成「项目集合型分类」，要求先有 PRJ-xxxx 实例目录，
+    #    于是 prd 内容规范永远匹配不到它（两个子系统在这里打交叉）。
+    #    想让 PRD 直接住 docs/：把「prd」从这个关键词列表里删掉；
+    #    想让 PRD 住项目里：按 projects/{project_id}/plan/ 落，两种都行，别混着用。
     keywords: [项目, 需求, 设计, 计划, prd]
     instance:
       param: project_id
