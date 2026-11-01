@@ -181,7 +181,7 @@ rules:
 
 拿 4970 份真实文档（pmboard / deepseek-harness / dataforge / taskmaster）跑随包默认：
 **放行 99%｜纠偏 0%｜打回 1%**——原因是判定链第一原则「目录现状优先」，文件已在真实目录里就不插手。
-新建一份典型文档则 9/12 自动归位（prd / guides / adr / research / api）。
+新建一份典型文档：9/12 归到对应目录（prd / guides / adr / research / api），1/12 原样放行（`docs/test-plan.md` 这类项目级文档，`meta` 分类的 dest 就是当前位置），2/12 打回一次（`notes.md` / `meeting-*.md` 这种没有主题词的裸文件名，第二次放行）。
 
 复现（先 `pnpm build`）：`node scripts/calibrate-defaults.mjs <仓库根…>`，加 `--new` 只看新文件那一半。
 数字会随仓库漂移，脚本用于校准，不进测试断言。
@@ -248,6 +248,9 @@ test/                      vitest：decide / intercept / rules / format / docs /
 - [模板与规则契约](docs/template-authoring.md)——模板结构、占位符、五套示例的设计来源
 - [格式校验设计](docs/content-validation-design.md)——匹配、解析、原语、规则引擎的实现细节
 - [测试方案](docs/test-plan.md)——覆盖范围、缺口与实测记录
+- [设计评审模板](docs/design-review-template.md)——90 分钟、有结论、能追责的评审怎么开（模板类资产）
+- [date-prefix 方案](docs/date-prefix-design.md)——文件名带日期的占位符设计（**提案，未实现**）
+- [插件分工调研](docs/research/研发设计调研报告-文档模板类插件分工与集成方案.md)——与 pmboard 模板体系的分工（**调研方案，D-1/D-2 未裁决**）
 - [更新日志](CHANGELOG.md)——版本与变更
 
 ## 贡献

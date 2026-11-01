@@ -300,7 +300,7 @@ rules:
 3. 兜底 `on_exhausted`：`allow`（accept + 警告上下文，默认）｜`block`；
    `ask` 不可用于 post 钩子（`PostToolDecision` 只有 accept/block）
 
-干跑出口：`file_validate` 工具，不写盘先校验草稿。
+干跑出口：原计划用 `file_validate` 工具（不写盘先校验草稿）——**未实现**，工具面已于 2026-10-15 归零。
 
 ---
 

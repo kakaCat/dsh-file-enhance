@@ -10,6 +10,7 @@ on:
     paths:
       - '.github/release-notes/**'
       - '.github/workflows/release-notes.yml'
+    tags: ['v*']            # 打 tag 即发版：按 <tag>.md 创建或更新 Release
   workflow_dispatch:
     inputs:
       tag:
@@ -44,9 +45,11 @@ jobs:
             echo "::notice::$FILE 不存在，跳过（该 tag 用 GitHub 自动生成的说明）"
             exit 0
           fi
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::notice::release $TAG 还不存在，跳过（发版后再推一次本文件即可）"
-            exit 0
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file "$FILE"
+            echo "::notice::已更新 $TAG 的发布说明（$(wc -l < "$FILE") 行）"
+          else
+            # release 还不存在就创建：打 tag 即发版，不需要人工点网页或本地 gh
+            gh release create "$TAG" --title "$TAG" --notes-file "$FILE"
+            echo "::notice::已创建 release $TAG（$(wc -l < "$FILE") 行说明）"
           fi
-          gh release edit "$TAG" --notes-file "$FILE"
-          echo "::notice::已同步 $TAG 的发布说明（$(wc -l < "$FILE") 行）"

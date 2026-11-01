@@ -24,6 +24,7 @@ agent 要新建文件
 └─ ⑤ 主目录下、直接落在主目录（未分类）
        ├─ 匹配现实目录 → 🔧 自动纠偏到该目录
        ├─ 匹配 yaml 分类 → 🔧 自动纠偏到规范路径
+       │    └─ 渲染结果就是当前位置（dest: "{slug}.md"）→ 放行，不移动
        └─ 都不中 → 打回（附：现有结构 + 分类菜单）；第二次放行
 ```
 
@@ -39,6 +40,14 @@ root: docs                 # 该类型的主目录
 root_allow: [TODO.md]      # 根目录白名单（追加在内置默认之上）
 
 categories:
+  # 项目级文档：设计稿 / 测试方案 / 规则说明这类，本来就该直接放 docs/ 根。
+  # dest 写 "{slug}.md" → 渲染结果就是当前位置，判定直接放行（不移动、不打扰）。
+  # 没有这一条，docs/ 根下的新文档会被判「未分类」。
+  meta:
+    folder: meta
+    keywords: [设计, 方案, 规范, 规则, 模板, 测试, 计划, 说明, design, spec, rules, template, test, plan]
+    dest: "{slug}.md"
+
   guides:
     folder: guides
     keywords: [指南, 教程, guide, tutorial]   # 用于把「文件主题词」归位
@@ -59,9 +68,10 @@ categories:
       pattern: "^PRJ-\\d{4}$"
       acquire: auto
       scaffold: [requirement/, design/, plan/] # 骨架目录
+    # 变体不写 keywords：变体只在文件已落在 projects/PRJ-xxxx/<变体>/ 下时按目录名匹配。
+    # 给了关键词，它就会去抢 docs 根下的裸文件，而那条路径没有实例编号，只能报 need-allocate。
     variants:
       design:
-        keywords: [设计, design]
         dest: "projects/{project_id}/design/{slug}.md"
 ```
 
@@ -134,6 +144,7 @@ categories:
 | 改文件名风格 | 该分类的 `naming`（或分类内 `variants[].naming`） |
 | 编号类文件（ADR / RFC） | `dest` 用 `{auto_number:4}`，扫同目录取 max+1 |
 | 项目制文档 | `kind: collection` + `instance`，先建 `PRJ-xxxx` 实例目录再放文件 |
+| 项目级文档就放 docs/ 根 | `meta` 分类：`dest: "{slug}.md"`，渲染即当前位置 → 放行 |
 | 完全关掉路径判定 | 删掉 `.dsh/folder-path-rules/<ext>.yaml`（该类型即不受约束） |
 
 规则改完**即时生效**（按 mtime 热重载），不需要重启宿主。

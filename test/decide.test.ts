@@ -204,3 +204,33 @@ describe('随包默认规则：PRD 与内容规范的接线', () => {
     expect(shipped.categories.prd?.keywords).toContain('prd')
   })
 })
+
+describe('随包默认规则：docs 根下的项目级文档', () => {
+  const loaded: Loaded = {
+    rules: normalizeRules(yaml.load(DEFAULT_MD_RULES_YAML), 'md'),
+    path: '/ws/.dsh/folder-path-rules/md.yaml',
+  }
+
+  it.each([
+    'docs/test-plan.md',
+    'docs/template-authoring.md',
+    'docs/folder-path-rules.md',
+    'docs/content-validation-design.md',
+    'docs/设计-缓存方案.md',
+  ])('%s 原样放行（meta 分类的 dest 就是当前位置）', (target) => {
+    expect(run(target, { loaded })).toMatchObject({ kind: 'pass', code: 'already-normal' })
+  })
+
+  it('无关键词的裸文件仍然打回（附分类菜单；第二次放行）', () => {
+    expect(run('docs/notes.md', { loaded })).toMatchObject({ kind: 'deny', code: 'unclassified' })
+    expect(run('docs/notes.md', { loaded, priorDenials: 1 })).toMatchObject({ kind: 'pass', code: 'free-play' })
+  })
+
+  it('集合型变体不再靠关键词抢 docs 根下的文件（只按目录名匹配）', () => {
+    // 变体目录内仍然按目录名认：projects/PRJ-0001/design/x.md → 放行
+    const t = tree([{ name: 'projects', subdirs: ['PRJ-0001'] }])
+    expect(run('docs/projects/PRJ-0001/design/cache.md', { loaded, tree: t })).toMatchObject({ kind: 'pass' })
+    // 但 docs 根下的「设计」类文件不会被它抢成 need-allocate
+    expect(run('docs/设计-缓存方案.md', { loaded })).not.toMatchObject({ kind: 'deny', code: 'need-allocate' })
+  })
+})

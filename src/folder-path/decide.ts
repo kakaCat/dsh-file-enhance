@@ -206,6 +206,9 @@ export function decide(args: DecideArgs): Verdict {
           ? normalizedRendered.slice(rootPrefix.length)
           : rendered
         const to = join(rootAbs, destRel)
+        // 分类的 dest 渲染出来就是当前位置（`dest: "{slug}.md"`）：这类文档本来就不该挪，
+        // 返回 pass 而不是「纠偏到自己」——否则拦截器会 deny 一次再原样写回，白折腾一个往返。
+        if (to === target) return { kind: 'pass', code: 'already-normal' }
         return { kind: 'correct', code: 'unclassified->rules', source: 'rules', to, category: { key: ruled.key, folder: ruled.folder, naming: ruled.naming }, target, rules, rootAbs, tree }
       }
       return { kind: 'deny', code: 'need-allocate', target, category: ruled.parent, rules, rootAbs, tree }

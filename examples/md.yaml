@@ -50,24 +50,33 @@ categories:
     keywords: [prd, 产品需求]
     dest: "prd/{slug}.md"
 
+  # 项目级文档：设计稿 / 测试方案 / 规则说明这类东西，**本来就该直接放 docs/ 根**。
+  # dest 渲染出来就是当前位置（{slug}.md），判定返回 pass——不移动、不打扰。
+  # 没有这一条，docs/ 根下任何新文档都会被判「未分类」，或含「设计」时被要求先建 PRJ-xxxx。
+  meta:
+    folder: meta
+    # 中英都要：英文项目里文档名多是 design / spec / rules / test-plan 这种写法
+    keywords: [设计, 方案, 规范, 规则, 模板, 测试, 计划, 说明, design, spec, rules, template, test, plan, review, architecture]
+    dest: "{slug}.md"
+
   project:
     folder: projects
     kind: collection
-    # 关键词里**不要**放 prd / 产品需求——它们归上面那个分类；
-    # 放进这里会把 docs/prd-*.md 截在路径判定，prd 内容规范就永远匹配不到。
-    keywords: [项目, 需求, 设计, 计划]
+    # 关键词只放「项目」：集合型分类靠实例编号识别，不该靠「设计/需求/计划」这类
+    # 到处都是的文档词去抢——抢了就把项目级文档逼成 need-allocate。
+    keywords: [项目]
     instance:
       param: project_id
       pattern: "^PRJ-\\d{4}$"
       acquire: auto
       scaffold: [requirement/, design/, plan/]
+    # 变体**不写 keywords**：变体只在「文件已在 projects/PRJ-xxxx/<变体>/ 下」时按目录名匹配（④）；
+    # 一旦给它关键词，docs 根下的裸文件就会被它抢走，而那条路径又没有实例编号可用，
+    # 结果只会是一句让人摸不着头脑的 need-allocate（本项目自己的 6 份 docs 全中过这个坑）。
     variants:
       requirement:
-        keywords: [需求, requirement, prd]
         dest: "projects/{project_id}/requirement/{slug}.md"
       design:
-        keywords: [设计, design, 方案]
         dest: "projects/{project_id}/design/{slug}.md"
       plan:
-        keywords: [计划, plan, 拆分, 排期]
         dest: "projects/{project_id}/plan/{slug}.md"
