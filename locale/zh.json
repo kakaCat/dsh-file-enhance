@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "文件规范增强",
+    "description": "让 agent 按项目自己的规范创建文件：新文件按 .dsh/folder-path-rules/<ext>.yaml 归位与命名，文档内容按 .dsh/file-format-specs/<type>/ 校验；规则住在工作区、改完即生效，插件不注册任何工具。"
+  }
+}

@@ -1,15 +1,21 @@
 # dsh-file-enhance
 
 [![CI](https://github.com/kakaCat/dsh-file-enhance/actions/workflows/ci.yml/badge.svg)](https://github.com/kakaCat/dsh-file-enhance/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kakaCat/dsh-file-enhance)](https://github.com/kakaCat/dsh-file-enhance/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.2.0--rc.1-blue)](package.json)
+[![Node ≥ 20](https://img.shields.io/badge/node-%3E%3D%2020-339933)](package.json)
+[![GitHub repo](https://img.shields.io/badge/github-kakaCat%2Fdsh--file--enhance-blue)](https://github.com/kakaCat/dsh-file-enhance)
 
 DSH 插件：**让 agent 按项目自己的规范创建文件**——不该放哪就不放哪，不该长什么样就不长什么样。
+
+版本与变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 前置了解
 
 - **DSH 是什么**：DeepSeek Harness，agent 的宿主运行时。本插件是一条标准的 **Cordis 插件**，经 [cordis.patch.yml](cordis.patch.yml) 的 bundle patch 装载，只 `inject: ['tools']`、零工具注册。
-- **宿主版本**：`@deepseek-ai/dsh-tools`：`^0.2.0-rc.1 || ^0.2.1-alpha.2`（与 `peerDependencies` 同口径）。工作区根优先用 `workingDirectory` 服务（dsh ≥0.2.1-alpha.2），更早版本回落 `exec.agent.session.header.cwd`，最后回落 `process.cwd()`。
-- **不需要发布到 npm 也能装**：`pnpm build` 出的目录，或 `pnpm pack` 出的 tarball，直接喂给宿主的 `plugin_manager` 即可（见下文「安装」）。
+- **宿主版本**：`engines.dsh = >=0.2.0-rc.1 <0.3.0`——宿主在安装与启动时校验，不满足直接拒绝装载（不靠运行时嗅探）。`peerDependencies` 另声明 `@deepseek-ai/dsh-tools` 的兼容区间。工作区根优先用 `workingDirectory` 服务（dsh ≥0.2.1-alpha.2），更早版本回落 `exec.agent.session.header.cwd`，最后回落 `process.cwd()`。
+- **不需要发布到 npm 也能装**：`pnpm build` 出的目录，或 `pnpm pack` 出的 tarball，直接喂给宿主的 `plugin_manager` 即可（见下文「[安装与卸载](#安装与卸载)」）。
 
 ## 定位：行为增强，不是能力增强
 
@@ -321,6 +327,41 @@ rules:
 【怎么改】把文档改成上面的目标结构，并逐条修正不符合项；用 write 或 edit 修同一文件
 ```
 
+## 安装与卸载
+
+**前置**：Node ≥ 20（构建需 ≥ 22.18）；DSH 满足 `engines.dsh`（见[兼容性](#兼容性)）。
+
+**第一步，出产物**——`dist/` 不入库，跳过这步会装出一个 import 失败的插件：
+
+```bash
+git clone https://github.com/kakaCat/dsh-file-enhance.git
+cd dsh-file-enhance
+pnpm install && pnpm build       # → dist/index.mjs + dist/index.d.mts
+pnpm check:dist                  # 可选：冒烟检查入口 / 插件契约 / bundle patch / 清单本地化
+pnpm pack                        # 可选：产出 dsh-file-enhance-<version>.tgz（prepack 会自动 build）
+```
+
+**第二步，装进 profile**（二选一）：
+
+- 会话里用 `plugin_manager` → `install_bundle`，target 指向上面的**仓库目录**或 tarball；
+- 或命令行 `dsh plugin --profile <profile> add <仓库绝对路径>`。
+
+> 两条路都**不会**替你构建：`install_bundle` 与 `dsh plugin add` 对本地目录走 pnpm 的 link，`prepack` 不触发。
+> 所以第一步不能省。插件装载后的行为由「配置表 + 工作区 `.dsh/` 规则」决定，不依赖任何全局安装。
+
+装好后重启 Host（Host 半只在启动时加载）。装成功的判据：插件清单里出现 `dsh-file-enhance`——
+展示名与描述来自 [locale/zh.json](locale/zh.json)，中文界面显示「文件规范增强」。
+
+**卸载**：`dsh plugin --profile <profile> remove dsh-file-enhance`，或 `plugin_manager` → `remove_bundle`。
+卸载**不删**工作区里的 `.dsh/`——那是你的规则资产，不是插件的；留着不会影响其它插件。
+
+**初始化工作区规则**（可选；不建也不会坏，冷启动垫片会自动落一份可改的默认）：
+
+```bash
+cp examples/md.yaml .dsh/folder-path-rules/md.yaml          # 路径规则（不想要就不建，等于只拦内容）
+cp -r examples/file-format-specs .dsh/file-format-specs     # 内容规范（按需删掉不要的类型）
+```
+
 ## 配置
 
 装载行在 [cordis.patch.yml](cordis.patch.yml)（`id: dsh-file-enhance`）。**规则不在这里配**——规则住工作区 `.dsh/`。
@@ -330,25 +371,6 @@ rules:
 | `autoCorrect` | `true` | 路径未分类时由插件代写到规范路径（落点已存在则不覆盖）；设 `false` 改为打回让 agent 重试 |
 | `contentValidate` | `true` | 是否挂内容格式校验（`post-execute`） |
 | `scaffoldDefault` | `true` | 冷启动垫片：工作区没有规则时回落内置默认继续判定，并把默认规则落盘到 `.dsh/`；`false` = 无规则即放行（旧行为） |
-
-安装（不需要发布到 npm）：
-
-```bash
-git clone git@github.com:kakaCat/dsh-file-enhance.git
-cd dsh-file-enhance
-pnpm install && pnpm build       # → dist/index.mjs
-pnpm pack                        # 可选：产出 dsh-file-enhance-<version>.tgz
-```
-
-然后在 DSH 会话里用 `plugin_manager` → `install_bundle`，target 指向上面的目录或 tarball。
-插件装载后的行为由「配置表 + 工作区 `.dsh/` 规则」决定，不依赖任何全局安装。
-
-冷启动（两步，都是复制）：
-
-```bash
-cp examples/md.yaml .dsh/folder-path-rules/md.yaml          # 路径规则（不想要就不建，等于只拦内容）
-cp -r examples/file-format-specs .dsh/file-format-specs     # 内容规范（按需删掉不要的类型）
-```
 
 ## 工具面：零
 
@@ -360,7 +382,7 @@ cp -r examples/file-format-specs .dsh/file-format-specs     # 内容规范（按
 | 知道该放哪 | 不用提前问——打回指引单里已经给了正确路径、`docs/` 现状和分类菜单 |
 | 新增一个分类 | 先调宿主自带的 **`ask_user_question`** 征得用户同意，再用**原生 `write`** 把分类写进 `.dsh/folder-path-rules/<ext>.yaml`，改完即生效 |
 | 改文档结构 | `write` / `edit` 修同一文件；不合规会打回一次报全，并附目标模板 |
-| 初始化 | 复制 [examples/md.yaml](examples/md.yaml) 与 `examples/file-format-specs/`（见上文冷启动） |
+| 初始化 | 复制 [examples/md.yaml](examples/md.yaml) 与 `examples/file-format-specs/`（见「[安装与卸载](#安装与卸载)」） |
 
 为什么一个工具都不注册：工具名 + description + 参数文档是**常驻** system prompt 的，注册工具就等于把规则面挂上去，
 与「规则不常驻」直接冲突。而「建文件前先问落点」这类工具买到的只是省一次打回往返，代价是常驻上下文。
@@ -385,12 +407,33 @@ cp -r examples/file-format-specs .dsh/file-format-specs     # 内容规范（按
 - **工作区根按 agent 解析**，不是插件进程 cwd：`workingDirectory` 服务（dsh ≥0.2.1-alpha.2）→ `exec.agent.session.header.cwd`（0.2.0-rc.x）→ `process.cwd()` 回落
 - **改插件代码后需重启宿主**：ESM 模块缓存，HMR 不监视 `node_modules` 里的 bundle
 
+## 兼容性
+
+| 项 | 要求 |
+|---|---|
+| DSH | `>=0.2.0-rc.1 <0.3.0`（`engines.dsh`；不满足时**安装与启动都拒绝**，不做运行时嗅探） |
+| Node.js | ≥ 20（运行时）；≥ 22.18（构建、`pnpm pack`、CI） |
+| 宿主服务 | `tools`（必需，缺了整条装载路径不生效）；`fs`（可选，缺失时代写回落 `node:fs`）；`workingDirectory`（可选，缺失时回落 `session.header.cwd` → `process.cwd()`） |
+| 平台 | 与宿主一致（CLI / Desktop / Web 均可——本插件没有客户端半，不注册路由、不画界面） |
+| 工作区 | 任意；`.dsh/` 不存在时由冷启动垫片创建 |
+| 工具面 | `write` / `edit`（宿主原生）。只拦 `write` 的**新建**，`edit` 只走内容校验 |
+
+## 数据与隐私
+
+- **只读**工作区里的规则与规范：`.dsh/folder-path-rules/*.yaml`、`.dsh/file-format-specs/**`，以及它们指向的 `template.md` / `example.md`；不遍历工作区其它文件。
+- **写盘只有两处**：冷启动垫片落默认规则（逐文件 `wx`，目标存在即跳过），自动纠偏代写新文件（落点已存在则**不覆盖**；有宿主 `fs` 服务时经它写，策略与审计仍归宿主）。
+- **不联网、不采集、不上报**；全部判定在本地进程内完成，无 LLM 调用、无遥测。
+- **用户脚本**（`spec.yaml` 的 `functions.expr` / `functions.script`）在 `node:vm` 的新上下文里执行，只注入 `doc` / `text` / `fileName` / `relPath` / `specName` / `api` 与少量纯函数全局，单次 1 秒超时。
+  **`node:vm` 不是安全边界**——本插件的信任模型是「规则文件 = 项目代码」。只把来自可信仓库的 `spec.yaml` 放进工作区；别把第三方 spec 当数据加载。
+- **进对话的内容**：打回文本包含工作区相对路径、`docs/` 目录现状（目录名、文件数、样例文件名）与模板正文，都是项目自己的内容。代写失败时会把系统错误原文（可能含绝对路径）带回对话；不希望这样就把 `autoCorrect` 设为 `false`。
+
 ## 开发
 
 ```bash
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（8 文件 / 130 用例）
+pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（9 文件 / 145 用例）
 pnpm build       # tsdown → dist/
+pnpm check:dist  # build 之后跑：入口文件、插件契约、bundle patch、清单本地化
 ```
 
 > **Node 版本**：`pnpm build` 需要 **Node ≥22.18**（tsdown 的引擎要求 `^22.18.0 || >=24.11.0`；Node 20 会在构建阶段报错）。
@@ -426,7 +469,10 @@ src/content-format/        内容格式子系统（读 .dsh/file-format-specs/�
 examples/md.yaml                     随包示例路径规则（唯一一份）
 examples/file-format-specs/<type>/   随包示例内容规范（spec.yaml + template.md + example.md）
 docs/                               设计与测试文档（模板设计、格式校验设计、测试方案）
-test/                               vitest：decide / intercept / rules / format / docs
+test/                               vitest：decide / intercept / rules / format / docs / service
+scripts/sync-builtin-specs.mjs      examples/ → src/content-format/builtin-specs.ts（构建前同步）
+scripts/smoke-dist.mjs              dist 装载冒烟：入口 / 插件契约 / bundle patch / 清单本地化
+locale/                             插件清单本地化文案（zh / en）
 ```
 
 ## 相关文档
@@ -434,5 +480,24 @@ test/                               vitest：decide / intercept / rules / format
 - [模板文档设计](docs/template-authoring.md)——模板与规则的结构契约、占位符语法、五套示例的设计来源
 - [格式校验设计](docs/content-validation-design.md)——匹配、解析、原语、规则引擎的实现细节
 - [测试方案](docs/test-plan.md)——覆盖范围与实测记录
+- [更新日志](CHANGELOG.md)——版本与变更
+
+## 贡献
+
+欢迎 issue 与 PR。提交前跑一遍：
+
+```bash
+pnpm typecheck && pnpm test && pnpm build && pnpm check:dist
+```
+
+CI 在 Node 22 上跑同样四条（typecheck / test / build / dist 冒烟）。改 `examples/` 下的规范后记得
+`pnpm sync:specs` 重新生成内置默认，否则 `test/scaffold-specs.test.ts` 会红——这条守护是有意的，
+防止「随包示例」和「插件内置默认」悄悄漂移。
+
+改动请一并更新 [CHANGELOG.md](CHANGELOG.md) 的未发布段落。
+
+## License
+
+[MIT](LICENSE) © 2026 kakaCat
 
 [![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

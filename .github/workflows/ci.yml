@@ -8,6 +8,7 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -33,3 +34,7 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # build 成功 ≠ 装得上：入口文件、插件契约、bundle patch、插件清单本地化逐条断言。
+      - name: Dist smoke
+        run: pnpm check:dist

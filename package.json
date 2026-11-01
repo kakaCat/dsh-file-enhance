@@ -25,7 +25,8 @@
     "markdown"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": ">=0.2.0-rc.1 <0.3.0"
   },
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
@@ -35,12 +36,15 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
+    "locale",
     "examples",
     "cordis.patch.yml",
+    "CHANGELOG.md",
     "README.md"
   ],
   "scripts": {
@@ -48,6 +52,7 @@
     "prebuild": "pnpm sync:specs",
     "prepack": "pnpm build",
     "build": "tsdown",
+    "check:dist": "node scripts/smoke-dist.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
   },

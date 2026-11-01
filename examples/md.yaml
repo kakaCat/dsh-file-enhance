@@ -16,7 +16,7 @@
 #   dest 占位符：{slug} {folder} {root} {auto_number:4} {project_id}
 #
 #   kind: collection = 集合型分类：先有「实例编号文件夹」，文件放在实例里面。
-#     instance.acquire: auto → file_resolve 会自动分配编号并建出 scaffold 骨架目录
+#     instance.acquire: auto → 插件自动分配下一个编号，并建出 scaffold 骨架目录（不注册工具）
 type: md
 root: docs
 root_allow: []

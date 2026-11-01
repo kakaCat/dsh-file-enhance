@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "File Enhance",
+    "description": "Makes the agent create files the way the project expects: new files are placed and named by .dsh/folder-path-rules/<ext>.yaml, document content is validated against .dsh/file-format-specs/<type>/. Rules live in the workspace and reload on change; the plugin registers no tools."
+  }
+}

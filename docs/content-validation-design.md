@@ -338,8 +338,8 @@ src/content-format/rules/         内容格式规则引擎
 | 阶段 | 内容 |
 |---|---|
 | **P0 ✅ 已实现** | folder-path-rules 改名 + 匹配表 + spec 加载 + 解析器 + 检查原语（frontmatter/sections/table/ids/forbidden-text/template-sections）+ post 钩子（符合零返回 / 不符合 block）+ delta + 代写前预校验 + 46 条测试通过 |
-| **P1** | 其余检查、warning、`max_attempts`/`on_exhausted`、`file_validate`、`enforce_on` |
-| **P2** | `file_check` 格式巡检、warn 模式、auto-correct 预校验、模板资产（对齐 pm templates） |
+| **P1 ✅ 已实现** | 其余检查、warning、`max_attempts`/`on_exhausted`、`enforce_on`（`file_validate` 工具未实现——工具面已归零） |
+| **P2（未开始）** | `file_check` 全仓巡检（**未实现**，无该工具）、模板资产对齐 pm templates（未做）；`warn` 模式与代写前预校验已在 P1 落地 |
 
 ---
 

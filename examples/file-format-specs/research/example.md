@@ -83,7 +83,7 @@ E-1（`pre-execute` 只能 allow / deny / cancel / ask，且 `exec.arguments` �
 
 **决策影响**
 
-D-3。决定 spec 是否放 `.dsh/file-format-specs/`、是否需要 mtime 热重载、是否需要 `file_propose` 这类自助入口。
+D-3。决定 spec 是否放 `.dsh/file-format-specs/`、是否需要 mtime 热重载、是否需要免手写 YAML 的自助入口。
 
 **调研与证据**
 

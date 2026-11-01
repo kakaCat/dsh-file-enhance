@@ -3,7 +3,8 @@
 > **2026-10-15 变更**：插件**工具面归零**——`file_resolve` / `file_propose` / `file_check` / `file_rules_init`
 > 四个工具与 `src/folder-path/tools.ts` 已删除（理由见 README「工具面：零」）。本文涉及这四个工具的条目为
 > **历史记录**；现状替代：宿主的 `ask_user_question`（问用户）+ 原生 `write`（改规则 yaml）。
-> 用例基线：`pnpm test` = 8 个文件 / **130 条用例全绿**（decide 24、rules 10、intercept 17、index 3、format 51、docs 2、scaffold 16、scaffold-specs 7）。
+> 用例基线（2026-11-01 复核）：`pnpm test` = **9 个文件 / 145 条用例全绿**
+> （decide 24、rules 10、intercept 17、index 3、format 51、docs 2、scaffold 16、scaffold-specs 7、service 15）。
 
 > 范围：`folder-path`（放哪、叫什么）+ `content-format`（内容长什么样）+ 二者在 `tools/pre-execute` / `tools/post-execute` 上的接线。
 > 本方案不写用例步骤——用例住在 `test/*.test.ts`（见 `docs/content-validation-design.md` §9）。
@@ -136,7 +137,7 @@ pnpm build       # tsdown → dist/index.mjs
 | P1 | A9 `denialTtlMs` 超时、多 agent 计数隔离 | 记忆串味会让「第二次放行」提前或滞后 |
 | P1 | B10 `on_exhausted: block` / `off` / `strict` / `sameContent` | `warn` 与 `enforce_on` 已补测，其余声明行为仍缺显式用例 |
 | P1 | B4 七个原语无直接用例 | 靠示例间接覆盖，改坏一个不一定会红 |
-| P1 | 四个工具（`file_resolve` / `file_propose` / `file_check` / `file_rules_init`）无测试文件 | 用户唯一的手动入口，目前只有「内置文本与 examples 一致」一条守护 |
+| ~~P1~~ | ~~四个工具（`file_resolve` / `file_propose` / `file_check` / `file_rules_init`）无测试文件~~ | **缺口已关闭**：四个工具于 2026-10-15 随工具面归零删除，`src/folder-path/tools.ts` 不再存在 |
 | P1 | `scanReality` / 规则 mtime 热重载 | 规则改完即生效是核心承诺，无回归网 |
 | P2 | C3 性能基线、C4 沙箱逃逸、并发写同路径 | 出问题不会静默，可接受后置 |
 
