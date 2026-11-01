@@ -206,6 +206,10 @@ rules:
 - **内容校验晚于落盘**：不合规时文件已写入，`block` 把工具结果变成错误让 agent 修；预算见 `max_attempts` / `on_exhausted`。
 - **路径规则先于内容规范命中**：被路径拦下的文件走不到内容校验——别让两条分类抢同一个关键词
   （随包规则为此把 PRD 单列一类，并把 `prd` / `产品需求` 从 `project` 关键词里拿掉）。
+- **与 dsh-pmboard 同装会打架**：pmboard 把产物写在 `docs/requirements/<REQ>/requirement.md`，文件名正好命中本插件的
+  `requirement` 规范——实测 5 份真实产物平均 **24.8 项**不合规，等于把对方正常产物全判死。
+  两者没有组合价值（模板 H2 交集 5%，见[调研裁决](docs/research/研发设计调研报告-文档模板类插件分工与集成方案.md#裁决2026-11-02)），
+  同时装时把 `file-format-specs/requirement/` 的 `mode` 调成 `warn` 或删掉该类型目录即可。
 - **同一目标连拦一次即放行**：根目录禁令不适用此豁免；拦截记忆保留 10 分钟。
 - **工作区根按 agent 解析**，不是插件进程 cwd：`workingDirectory` → `session.header.cwd` → `process.cwd()`。
 - **改插件代码后需重启宿主**：ESM 模块缓存，HMR 不监视 `node_modules` 里的 bundle。
