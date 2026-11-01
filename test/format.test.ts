@@ -198,10 +198,17 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(ws, { recursive: true, force: true }))
 
-function harness(): { call: (name: string, rel: string, content: string, before?: string | null) => Promise<PostToolDecision> } {
+function harness(logs: string[] = []): { call: (name: string, rel: string, content: string, before?: string | null) => Promise<PostToolDecision> } {
   const store = new FormatStore({ workspaceRoot: ws })
   let listener: any
-  installPostCheck(store, (l) => { listener = l }, { workspaceRoot: ws })
+  installPostCheck(store, (l) => { listener = l }, {
+    workspaceRoot: ws,
+    logger: {
+      debug: (m) => logs.push('debug:' + m),
+      info: (m) => logs.push('info:' + m),
+      warn: (m) => logs.push('warn:' + m),
+    },
+  })
   const call = (name: string, rel: string, content: string, before: string | null = null): Promise<PostToolDecision> => {
     const exec = { name, arguments: { file_path: rel, content }, agent: { id: 'a1' } }
     const result = { isError: false, value: { path: join(ws, rel), operation: 'create', before, after: content }, content: [] }
@@ -270,6 +277,30 @@ describe('post-execute 集成', () => {
     expect(last.kind).toBe('accept')
     const text = (last as { content: Array<{ text: string }> }).content[0].text
     expect(text).toContain('已按 on_exhausted=allow 放行')
+  })
+  it('打回时记一条结构化日志（spec / 文件 / 规则 / 违规数 / 次数）', async () => {
+    const logs: string[] = []
+    const { call } = harness(logs)
+    await call('write', 'docs/prd.md', '# 缺章节\n')
+    const warn = logs.find((l) => l.startsWith('warn:'))
+    expect(warn, logs.join('\n')).toBeDefined()
+    expect(warn).toContain('spec=prd')
+    expect(warn).toContain('file=docs/prd.md')
+    expect(warn).toContain('rules=sections')
+    expect(warn).toContain('errors=2')
+    expect(warn).toContain('attempt=1/3')
+  })
+  it('未命中规范不静默：记一条 debug', async () => {
+    const logs: string[] = []
+    const { call } = harness(logs)
+    await call('write', 'docs/other.md', '随便')
+    expect(logs.some((l) => l.startsWith('debug:') && l.includes('未命中'))).toBe(true)
+  })
+  it('预算用尽放行时，日志能区分「预算用尽」与 warn 模式', async () => {
+    const logs: string[] = []
+    const { call } = harness(logs)
+    for (let i = 0; i < 5; i++) await call('write', 'docs/prd.md', '# 缺章节\n')
+    expect(logs.some((l) => l.startsWith('info:') && l.includes('预算用尽'))).toBe(true)
   })
 })
 

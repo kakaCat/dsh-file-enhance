@@ -372,6 +372,30 @@ cp -r examples/file-format-specs .dsh/file-format-specs     # 内容规范（按
 | `contentValidate` | `true` | 是否挂内容格式校验（`post-execute`） |
 | `scaffoldDefault` | `true` | 冷启动垫片：工作区没有规则时回落内置默认继续判定，并把默认规则落盘到 `.dsh/`；`false` = 无规则即放行（旧行为） |
 
+## Host 服务：fileEnhance
+
+插件装载时通过 `ctx.provide('fileEnhance', …)` 暴露一个服务，供上层插件在**动手之前**按 profile 预置规范，
+而不是只能等写文件被拦下来才触发冷启动垫片。三个方法都按调用时传入的 `root` 解析工作区：
+
+| 方法 | 作用 | 写盘纪律 |
+|---|---|---|
+| `ensure(root)` | 预置默认规范（路径规则 + 五套文档规范），幂等 | 只写缺失文件 |
+| `status(root)` | 读当前规范清单（规则类型、规范类型） | 不写盘 |
+| `provision(root, profile)` | 按 `{ rules, formats }` 落指定规范 | 只写缺失文件；**先整体校验**，任一非法就抛 `FileEnhanceError`（`FILE_ENHANCE_INVALID_INPUT`），一个字节都不写 |
+
+```ts
+const service = ctx.fileEnhance                 // cordis 服务面
+service.ensure('/path/to/workspace')            // → { rules: { dir, types, created }, formats: { … } }
+service.status('/path/to/workspace')            // → { rules: { dir, types }, formats: { dir, types } }
+service.provision('/path/to/workspace', {
+  rules: [{ ext: 'md', yaml: '<md.yaml 全文>' }],
+  formats: [{ name: 'prd', spec: '<spec.yaml 全文>', template: '<template.md 正文>' }],
+})                                              // → { created: ['rule:md', 'format:prd'], skipped: [] }
+```
+
+判定与校验语义全部复用同一套实现（`RulesStore` / `FormatStore`），服务层只做「预置 / 读取 / 写入」三件事，
+不复制任何 `decide` / `validate` 逻辑；因此服务写进去的规范，与用户手写的是同一份东西。
+
 ## 工具面：零
 
 **本插件不注册任何工具**，agent 侧看不到任何 `file_*`，能力全部长在原生工具的行为上：
@@ -431,7 +455,7 @@ cp -r examples/file-format-specs .dsh/file-format-specs     # 内容规范（按
 
 ```bash
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（9 文件 / 145 用例）
+pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（9 文件 / 148 用例）
 pnpm build       # tsdown → dist/
 pnpm check:dist  # build 之后跑：入口文件、插件契约、bundle patch、清单本地化
 ```
@@ -465,6 +489,8 @@ src/content-format/        内容格式子系统（读 .dsh/file-format-specs/�
   script.ts                表达式 / 脚本沙箱（vm + 白名单 + 1s 超时）
   post-check.ts            tools/post-execute 监听（匹配 + 内容校验 + block）
   rules/                   规则引擎（engine / condition / builtin / functions / operators / path）
+
+src/host/service.ts        Host 服务 fileEnhance（ensure / status / provision，写盘纪律在本层）
 
 examples/md.yaml                     随包示例路径规则（唯一一份）
 examples/file-format-specs/<type>/   随包示例内容规范（spec.yaml + template.md + example.md）

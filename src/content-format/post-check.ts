@@ -60,19 +60,27 @@ export function installPostCheck(store: FormatStore, register: PostRegister, dep
     const abs = toAbs(workspaceRoot, rawPath)
     const rel = relative(workspaceRoot, abs)
     if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return next()
+    const relPosix = rel.split(/[/\\]+/).join('/')
 
-    const spec = store.match(rel.split(/[/\\]+/).join('/'), basename(abs), extKeyOf(abs), workspaceRoot)
+    const spec = store.match(relPosix, basename(abs), extKeyOf(abs), workspaceRoot)
 
-    if (spec === undefined) return next()
+    if (spec === undefined) {
+      // 静默放行是设计（无法可依，不误伤），但**不静默失败**：没命中要能在日志里看见，
+      // 否则「规则写了却不生效」只能靠猜。debug 级，不打扰正常会话。
+      deps.logger?.debug?.(`内容校验：未命中任何规范，放行 ${relPosix}`)
+      return next()
+    }
 
     const op: 'create' | 'update' = exec.name === 'edit' ? 'update' : value.operation === 'create' ? 'create' : 'update'
-    if (!spec.enforceOn.includes(op)) return next()
+    if (!spec.enforceOn.includes(op)) {
+      deps.logger?.debug?.(`内容校验：spec=${spec.name} 不覆盖 ${op}，放行 ${relPosix}`)
+      return next()
+    }
 
     const before = typeof value.before === 'string' ? value.before : null
     const templateText = readTemplate(spec)
     const skeletonText = buildSkeleton(spec)
     const exampleRel = spec.example === undefined ? undefined : relative(workspaceRoot, join(spec.dir, spec.example))
-    const relPosix = rel.split(/[/\\]+/).join('/')
     const report = validateDocument(spec, value.after, before, templateText, { fileName: basename(abs), relPath: relPosix })
     const key = (exec.agent?.id ?? 'agent') + ':' + abs
     const decision = decideFormatPolicy({
@@ -92,8 +100,20 @@ export function installPostCheck(store: FormatStore, register: PostRegister, dep
       },
     })
 
-    if (decision.kind === 'none') return next()
-    if (decision.kind === 'block') return { kind: 'block', feedback: [textBlock(decision.text)] }
+    if (decision.kind === 'none') {
+      deps.logger?.debug?.(`内容校验：通过 ${relPosix}（spec=${spec.name}）`)
+      return next()
+    }
+    // 结构化日志：一条一行、key=value，便于按 spec / 规则统计误报率（设计文档 NFR-5）。
+    const ruleIds = [...new Set(report.newErrors.map((v) => v.checkId))].join(',') || '—'
+    const summary = `spec=${spec.name} file=${relPosix} rules=${ruleIds} `
+      + `errors=${report.newErrors.length} warnings=${report.newWarnings.length} attempt=${attempts.count(key)}/${spec.maxAttempts}`
+    if (decision.kind === 'block') {
+      deps.logger?.warn?.(`内容校验：打回 ${summary}`)
+      return { kind: 'block', feedback: [textBlock(decision.text)] }
+    }
+    // accept 但带提示 = warn 模式、只有 warning、或 on_exhausted=allow 的放行，三种要能区分。
+    deps.logger?.info?.(`内容校验：放行但提示（${spec.mode === 'warn' ? 'mode=warn' : report.newErrors.length === 0 ? '仅 warning' : '预算用尽'}） ${summary}`)
     return { kind: 'accept', content: [textBlock(decision.text)] }
   }
 
