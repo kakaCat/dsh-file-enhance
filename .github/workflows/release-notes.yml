@@ -1,0 +1,52 @@
+# 发布说明的「唯一事实源」在 .github/release-notes/<tag>.md——改文件即同步到 GitHub Release。
+#
+# 为什么用 Actions 而不是本地 gh：本地环境到 github.com 不通（只有 api.github.com 与 SSH 可达），
+# 而 Actions 自带 GITHUB_TOKEN，写 Release 不需要任何人工凭据。
+name: Sync release notes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/release-notes/**'
+      - '.github/workflows/release-notes.yml'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要同步的 tag（留空 = 最新 tag）'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # 需要 tag 才能定位「最新 tag」
+
+      - name: Sync release body from .github/release-notes/<tag>.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-}"
+          if [ -z "$TAG" ]; then
+            TAG=$(git describe --tags --abbrev=0)
+            echo "未指定 tag，取最新：$TAG"
+          fi
+          FILE=".github/release-notes/${TAG}.md"
+          if [ ! -f "$FILE" ]; then
+            echo "::notice::$FILE 不存在，跳过（该 tag 用 GitHub 自动生成的说明）"
+            exit 0
+          fi
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::release $TAG 还不存在，跳过（发版后再推一次本文件即可）"
+            exit 0
+          fi
+          gh release edit "$TAG" --notes-file "$FILE"
+          echo "::notice::已同步 $TAG 的发布说明（$(wc -l < "$FILE") 行）"
