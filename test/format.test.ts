@@ -208,6 +208,20 @@ describe('动态代码：expr / script（spec.functions）', () => {
     expect(r.errors).toHaveLength(1)
     expect(r.errors[0].message).toContain('函数执行失败')
   })
+  it('白名单边界：脚本里看不到 process / require / fs（能看到就说明注入口子开大了）', () => {
+    const probe = [
+      'const leaks = ["process", "require", "fs"]',
+      '  .filter((name) => typeof globalThis[name] !== "undefined")',
+      '  .map((name) => ({ message: "白名单泄漏：" + name }))',
+      'return leaks',
+    ].join('\n')
+    const spec = s({ noLeak: { script: probe } }, [{ id: 'noLeak', assert: { fn: 'noLeak' } }])
+    expect(validateDocument(spec, '# t', null).errors).toHaveLength(0)
+    // 承诺过的上下文仍然可用（doc / text / api）
+    const usable = s({ hasApi: { expr: 'typeof api === "object" && typeof doc === "object" && typeof text === "string"' } },
+      [{ id: 'hasApi', assert: { fn: 'hasApi' } }])
+    expect(validateDocument(usable, '# t', null).errors).toHaveLength(0)
+  })
 })
 
 describe('打回指引：目标模板与骨架', () => {
