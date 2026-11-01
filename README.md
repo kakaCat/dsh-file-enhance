@@ -362,6 +362,46 @@ cp examples/md.yaml .dsh/folder-path-rules/md.yaml          # 路径规则（不
 cp -r examples/file-format-specs .dsh/file-format-specs     # 内容规范（按需删掉不要的类型）
 ```
 
+## 默认规则的杀伤面（实测）
+
+冷启动会往工作区落一份默认规则，落之前值得先回答一个问题：**它会不会一装就满屏打回？**
+拿 4970 份真实文档跑了一遍判定链（用随包默认，不读那些仓库自己的 `.dsh/`）：
+
+| 仓库 | 文档数 | 放行 | 纠偏 | 打回 |
+|---|---|---|---|---|
+| dsh-pmboard | 4453 | 100% | 0% | 0% |
+| deepseek-harness | 481 | 91% | 1% | 9% |
+| dsh-dataforge | 26 | 100% | 0% | 0% |
+| dsh-taskmaster | 10 | 90% | 0% | 10% |
+| **合计** | **4970** | **99%** | **0%** | **1%** |
+
+原因在判定链的第一原则：**目录现状优先**。文件已经躺在真实存在的目录里时规则不插手，
+它只在「新建」且「落点没有归属」的时候说话。
+
+新建一份典型文档（模拟一个带 `guides/` `adr/` `research/` 的项目）：
+
+| 文件名 | 结果 |
+|---|---|
+| `prd-登录优化.md` / `产品需求-订单.md` | → `docs/prd/` |
+| `指南-部署.md` / `guide-deploy.md` | → `docs/guides/` |
+| `adr-0007-选型.md` | → `docs/adr/` |
+| `调研-竞品分析.md` / `research-选型.md` | → `docs/research/` |
+| `api-支付接口.md` | → `docs/api/` |
+| `notes.md` / `meeting-2026-11-01.md` | 打回一次（附分类菜单；第二次放行） |
+| `设计-缓存方案.md` | 打回 `need-allocate`：`设计` 是集合型分类的关键词，要求先有 `PRJ-xxxx` 实例目录 |
+
+最后一行是**取舍而不是缺陷**：默认认为设计文档按项目归属（`docs/projects/PRJ-0001/design/…`）。
+如果你的习惯是把设计文档散放在 `docs/design/`，把 `project` 的 `keywords` 里的 `设计` 拿掉即可。
+
+复现（先 `pnpm build`）：
+
+```bash
+node scripts/calibrate-defaults.mjs ../dsh-pmboard ../deepseek-harness   # 已存在文档
+node scripts/calibrate-defaults.mjs --new ../dsh-pmboard                 # 新建典型文档
+```
+
+数字会随仓库内容漂移——脚本用于校准，不进测试断言。
+
 ## 配置
 
 装载行在 [cordis.patch.yml](cordis.patch.yml)（`id: dsh-file-enhance`）。**规则不在这里配**——规则住工作区 `.dsh/`。
@@ -507,6 +547,7 @@ docs/                               设计与测试文档（模板设计、格�
 test/                               vitest：decide / intercept / rules / format / docs / service / perf
 scripts/sync-builtin-specs.mjs      examples/ → src/content-format/builtin-specs.ts（构建前同步）
 scripts/smoke-dist.mjs              dist 装载冒烟：入口 / 插件契约 / bundle patch / 清单本地化
+scripts/calibrate-defaults.mjs      拿真实仓库校准默认规则的杀伤面（不进测试断言）
 locale/                             插件清单本地化文案（zh / en）
 ```
 
