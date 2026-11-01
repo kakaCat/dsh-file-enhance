@@ -146,6 +146,11 @@ pnpm build       # tsdown → dist/index.mjs
 ## 6. 真机发布清单（L4，每次发版手工）
 
 > 2026-10-15 在 DSH 桌面宿主 0.2.0-rc.2 上跑过一轮（host pid 24037），结论附在每条后面。
+>
+> **v0.1.0 尚未重跑**：当前宿主已是 0.2.1-rc.5，本轮新增了 `engines.dsh`、`locale/` 与结构化日志，
+> 发版前需要在同一台机器上再走一遍——重点看三条：插件清单显示中文名（locale 生效）、
+> 启动日志里能看到 `已装载（纯监听器，无自有工具）`（engines/入口正常）、写一份缺章节的 PRD
+> 能在宿主日志里看到 `内容校验：打回 spec=…` 那一行（结构化日志生效）。
 
 - [x] `pnpm build` 产物装进 DSH，`plugin_manager` 列表可见 —— `link:` 安装，`include:dsh-file-enhance` active
 - [x] 让 agent 在根目录建 `notes.md` → 被打回，指引单里有【可用分类】 —— 打回；且**第二次仍拦**（硬拦永不豁免，已修 footer 文案不再误导）
@@ -155,7 +160,7 @@ pnpm build       # tsdown → dist/index.mjs
 - [x] agent 按指引修好后重写 → **零返回**，对话里看不到任何校验痕迹 —— 模板原文重写，工具结果无校验输出
 - [ ] 改旧的不合规文件 → 只拦本次新增违规（delta 生效）—— L3 有 `before` 归责测试；真机未单独跑
 - [x] 改 `.dsh/**/*.yaml` 后不重启 → 新规则立即生效 —— `root_allow` 加白后同路径立即放行（mtime 热重载）
-- [ ] 无 `fs` 服务时（子代理 / 无 UI）→ 代写回落 `node:fs`，`file_propose` 退化为文字提议 —— 未跑；实测到的是更常见的「有 userQuestions 服务但无应答者」：`file_propose` 报错**且不写入**（不伪造批准）
+- [ ] 无 `fs` 服务时（子代理 / 无 UI）→ 代写回落 `node:fs` —— 未跑（历史记录里那条 `file_propose` 行为属已删除工具，不再适用）
 
 真机修复记录（这轮 L4 打出来的缺陷，已修）：
 
@@ -172,7 +177,7 @@ pnpm build       # tsdown → dist/index.mjs
 | 风险 | 对策 |
 |---|---|
 | 宿主 API 变更（`PreToolDecision` 档位、`exec.arguments` 冻结） | 类型系统 + L3 的返回值形状断言；升级宿主版本时先跑 §6 |
-| 校验误伤存量文件 | `diff_mode: delta` 为默认，`strict` 需显式声明；新项目接入先跑 `file_check` 巡检 |
+| 校验误伤存量文件 | `diff_mode: delta` 为默认，`strict` 需显式声明；新项目接入先在旁路工作区跑一轮再开 `block`（当前没有全仓巡检工具） |
 | 插件自身写盘越权 | 优先走宿主 `fs` 服务（策略/审计仍归宿主）；C2 补测后收口 |
 | 动态代码失控 | 1s 超时 + 白名单上下文 + 抛错降级；补 C4 |
 | 规则写得不对导致全线打回 | `rules-invalid` 首次拦截、第二次放行（已有用例守护） |
