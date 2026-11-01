@@ -147,10 +147,14 @@ pnpm build       # tsdown → dist/index.mjs
 
 > 2026-10-15 在 DSH 桌面宿主 0.2.0-rc.2 上跑过一轮（host pid 24037），结论附在每条后面。
 >
-> **v0.1.0 尚未重跑**：当前宿主已是 0.2.1-rc.5，本轮新增了 `engines.dsh`、`locale/` 与结构化日志，
-> 发版前需要在同一台机器上再走一遍——重点看三条：插件清单显示中文名（locale 生效）、
-> 启动日志里能看到 `已装载（纯监听器，无自有工具）`（engines/入口正常）、写一份缺章节的 PRD
-> 能在宿主日志里看到 `内容校验：打回 spec=…` 那一行（结构化日志生效）。
+> **v0.1.0 重跑记录（2026-11-01，DSH 0.2.1-rc.5，host pid 23627，重启后端口 60342）**
+>
+> - ✅ **装载**：先发现「装了但没挂载」——依赖里有 `link:`，但 profile 的 `dsh.profile.bundles` 与 `cordis.patch.yml` 里都没有它。把 `dsh-file-enhance` 加进 `bundles` 末尾后，`TERM` host 由 Electron 主进程自动拉起（4s 就绪），插件生效。
+> - ✅ **根目录硬拦**：新建 `l4-probe.md` → 拒收，回执含 `docs/` 真实现状（目录/文件数/样例）与分类菜单。
+> - ✅ **自动纠偏**：`docs/指南-真机探针.md` → 原调用被拒、文件实际落到 `docs/guides/`，回执与实际落点一致（探针已清理）。
+> - ✅ **内容校验**：`docs/research/metrics-l4-probe.md` → 一次报全 27 项违规 + 目标模板 + 「还有 2 次机会」（探针已清理，工作区 `git status` 干净）。
+> - ⚠️ **新发现（配置冲突）**：`docs/prd-*.md` 这类文件会先被**路径**规则拦下——随包 `md.yaml` 的 `project` 分类关键词含 `prd / 需求 / 设计 / 计划`，落进集合型分类，要求先有 `PRJ-xxxx` 实例目录。想直接在 `docs/` 下写 PRD 的项目，需要改这一条关键词或改用 `projects/{project_id}/…` 落点。
+> - 未跑：`autoCorrect: false`、`delta` 改写路径、无 `fs` 服务时回落 `node:fs`、插件清单里的中文展示名（需人眼看 GUI）。
 
 - [x] `pnpm build` 产物装进 DSH，`plugin_manager` 列表可见 —— `link:` 安装，`include:dsh-file-enhance` active
 - [x] 让 agent 在根目录建 `notes.md` → 被打回，指引单里有【可用分类】 —— 打回；且**第二次仍拦**（硬拦永不豁免，已修 footer 文案不再误导）
