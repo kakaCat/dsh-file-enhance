@@ -1,6 +1,6 @@
 {
   "name": "dsh-file-enhance",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "type": "module",
   "description": "DSH 文件规范插件：按 .dsh/folder-path-rules/<ext>.yaml 约束 agent 新建文件（MVP 只管 .md）的落点与命名",
