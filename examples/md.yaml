@@ -50,6 +50,14 @@ categories:
     keywords: [prd, 产品需求]
     dest: "prd/{slug}.md"
 
+  # 时间占位符（默认不启用，按需取消注释）：dest 支持 {date} / {time} / {datetime}，
+  # 可带格式（{date:YYYYMMDD}、{datetime:YYYYMMDD-HHmmss}）。文件名缺日期前缀会被自动补齐；
+  # 同一天同一主题重复创建会打回而不是覆盖。
+  #   daily:
+  #     folder: daily
+  #     keywords: [纪要, 日报, daily]
+  #     dest: "daily/{date}-{slug}.md"
+
   # 项目级文档：设计稿 / 测试方案 / 规则说明这类东西，**本来就该直接放 docs/ 根**。
   # dest 渲染出来就是当前位置（{slug}.md），判定返回 pass——不移动、不打扰。
   # 没有这一条，docs/ 根下任何新文档都会被判「未分类」，或含「设计」时被要求先建 PRJ-xxxx。

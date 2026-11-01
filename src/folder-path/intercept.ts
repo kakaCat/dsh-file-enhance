@@ -20,6 +20,7 @@ import { dirname, relative } from 'node:path'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import { decide } from './decide.js'
 import { extKeyOf, isInside, toAbs } from './paths.js'
+import { hasTimePlaceholder } from './timefmt.js'
 import { renderCorrection, renderGuidance } from './guidance.js'
 import { scanReality, listNames } from './scan.js'
 import type { RulesStore } from './rules.js'
@@ -196,10 +197,16 @@ export function installInterceptor(
     if (exists(verdict.to)) {
       bump(key)
       const correctedRel = relative(workspaceRoot, verdict.to)
+      // 带时间占位符的分类：撞名通常是「同一天同一主题写了第二次」——要说清楚，而不是笼统报已存在。
+      const cat = verdict.category === undefined ? undefined : rules?.categories[verdict.category.key]
+      const timed = cat?.dest !== undefined && hasTimePlaceholder(cat.dest)
       return {
         kind: 'deny',
-        reason: `自动纠偏已取消：规范落点 ${correctedRel} 已存在，为避免覆盖，本次未写入。\n\n`
-          + '请换一个新文件名，或确认后直接用 write / edit 修改这个已存在文件。',
+        reason: timed
+          ? `自动纠偏已取消：按时间补齐后的落点 ${correctedRel} 已存在（同一天同一主题的第二次创建不会被覆盖）。\n\n`
+            + '请换一个文件名（主题词换一下），或给这个分类的 dest 加上 {time} 让它落到分钟级。'
+          : `自动纠偏已取消：规范落点 ${correctedRel} 已存在，为避免覆盖，本次未写入。\n\n`
+            + '请换一个新文件名，或确认后直接用 write / edit 修改这个已存在文件。',
       }
     }
     const contentText = typeof args?.content === 'string' ? args.content : ''

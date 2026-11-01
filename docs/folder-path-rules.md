@@ -75,7 +75,26 @@ categories:
         dest: "projects/{project_id}/design/{slug}.md"
 ```
 
-占位符：`{slug}` `{folder}` `{root}` `{auto_number:4}` `{project_id}`。
+占位符：`{slug}` `{folder}` `{root}` `{auto_number:4}` `{project_id}`，
+外加时间三兄弟 `{date}` `{time}` `{datetime}`（可带格式，如 `{date:YYYYMMDD}`）。
+
+**时间前缀**（设计见 [date-prefix-design.md](date-prefix-design.md)）：
+
+```yaml
+  daily:
+    folder: daily
+    keywords: [纪要, 日报]
+    dest: "daily/{date}-{slug}.md"          # → docs/daily/2025-10-15-晨会纪要.md
+  minutes:
+    folder: minutes
+    keywords: [会议]
+    dest: "minutes/{date:YYYYMMDD}/{slug}.md"   # 日期当目录段也行
+```
+
+- 文件名缺日期前缀 → 自动补齐（纠偏）；已带前缀 → 剥掉再按 `naming` 校验，不会重复叠加；
+- 时间只在目录段时（`minutes/{date}/{slug}.md`）：已落在当天目录 → 放行；直接落在分类目录 → 纠偏进日期子目录；
+- 同一天同一主题重复创建 → **打回而不是覆盖**（回执会说清「同一天同一主题的第二次创建」）；
+- 时间取值是**判定那一刻**的本机时钟，不读 mtime、不联网。
 
 **完整示例**：[examples/md.yaml](../examples/md.yaml)——与内置默认草稿逐字节一致（测试守护）。
 

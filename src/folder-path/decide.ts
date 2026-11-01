@@ -19,6 +19,9 @@ import {
   BUILTIN_ROOT_ALLOW, extKeyOf, isInside, isRootLevel, matchesNaming,
   partsUnder, slugify, stemOf, toAbs,
 } from './paths.js'
+import {
+  DEFAULT_TIME_FORMAT, formatTime, hasTimePlaceholder, stripTimePrefix,
+} from './timefmt.js'
 import type { Loaded, RuleCategory, RuleSet, RuleTarget, RuleVariant, Tree, Verdict } from './types.js'
 
 /** `{auto_number:4}` → 该目录下一个编号（按已存在文件名里的最大数字 +1）。 */
@@ -34,6 +37,8 @@ export function nextAutoNumber(names: readonly string[], width: number): string 
 export interface DestPorts {
   rootAbs?: string
   listNames?: (dirAbs: string) => string[]
+  /** 时间占位符的取值时刻；缺省 `new Date()`（测试注入固定时钟）。 */
+  now?: Date
 }
 
 /**
@@ -54,7 +59,11 @@ export function instancePatternMatches(pattern: string, value: string): boolean 
  */
 export function renderDest(dest: string, vars: Record<string, string>, ports: DestPorts = {}): string {
   const out: string[] = []
-  const segs = String(dest).split('/')
+  // 时间占位符先整体替换：格式里可以有 `/`（`{date:YYYY/MM}`），那一段会变成目录层。
+  const timed = String(dest).replace(/\{(date|time|datetime)(?::([^}]+))?\}/g,
+    (_whole, kind: 'date' | 'time' | 'datetime', fmt?: string) =>
+      formatTime(ports.now ?? new Date(), fmt ?? DEFAULT_TIME_FORMAT[kind]))
+  const segs = timed.split('/')
   for (const seg of segs) {
     let s = seg
     if (s.includes('{auto_number')) {
@@ -143,6 +152,8 @@ export interface DecideArgs {
   priorDenials?: number
   /** 端口：读某目录下文件名（auto_number 用）。 */
   listNames?: (dirAbs: string) => string[]
+  /** 时间占位符的取值时刻；缺省 `new Date()`（测试注入固定时钟）。 */
+  now?: Date
 }
 
 /** 判定一次「新建」。返回 pass / correct / deny 三态。 */
@@ -161,7 +172,7 @@ export function decide(args: DecideArgs): Verdict {
   }
   const rules = loaded.rules
   const rootAbs = toAbs(workspaceRoot, rules.root)
-  const ports: DestPorts = { rootAbs, listNames }
+  const ports: DestPorts = { rootAbs, listNames, now: args.now }
 
   // ② 根目录：白名单放行，其余硬拦（不适用自由发挥豁免）
   if (isRootLevel(workspaceRoot, target)) {
@@ -255,8 +266,27 @@ export function decide(args: DecideArgs): Verdict {
     return { kind: 'pass', code: 'classified-rules', category: cat, variant }
   }
 
-  if (!matchesNaming(cat.naming, stem) && priorDenials < 1) {
-    return { kind: 'deny', code: 'naming', target, category: cat, naming: cat.naming, stem, rules, rootAbs, tree }
+  // 含时间占位符的分类：把 dest 渲染出来和当前路径比。
+  //   - 文件名段有 {date} → 先剥掉已有前缀再渲染（已有 2025-10-15-x.md 不会变成 2025-10-15-2025-10-15-x.md）
+  //   - 时间只在目录段（minutes/{date}/{slug}.md）→ 渲染结果自带目录层，比较即知该不该纠偏
+  let namingStem = stem
+  if (cat.dest !== undefined && hasTimePlaceholder(cat.dest)) {
+    const rest = stripTimePrefix(stem, cat.dest)
+    const base = rest ?? stem
+    const slug = matchesNaming(cat.naming, base) ? base : slugify(base)
+    const rendered = renderDest(cat.dest, { slug, folder: cat.folder, root: rules.root }, ports)
+    const normalizedRendered = rendered.replace(/\\/g, '/')
+    const normalizedRoot = rules.root.replace(/\\/g, '/')
+    const rootPrefix = normalizedRoot.endsWith('/') ? normalizedRoot : normalizedRoot + '/'
+    const destRel = normalizedRendered.startsWith(rootPrefix) ? normalizedRendered.slice(rootPrefix.length) : rendered
+    const to = join(rootAbs, destRel)
+    if (to !== target) {
+      return { kind: 'correct', code: 'date-prefix', source: 'rules', to, category: { key: cat.key, folder: cat.folder, naming: cat.naming }, target, rules, rootAbs, tree }
+    }
+    namingStem = base
+  }
+  if (!matchesNaming(cat.naming, namingStem) && priorDenials < 1) {
+    return { kind: 'deny', code: 'naming', target, category: cat, naming: cat.naming, stem: namingStem, rules, rootAbs, tree }
   }
   const variant = parts[1] !== undefined ? variantFolderOf(cat, parts[1]) : undefined
   return variant !== undefined

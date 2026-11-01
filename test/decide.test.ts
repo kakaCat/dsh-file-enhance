@@ -234,3 +234,54 @@ describe('随包默认规则：docs 根下的项目级文档', () => {
     expect(run('docs/设计-缓存方案.md', { loaded })).not.toMatchObject({ kind: 'deny', code: 'need-allocate' })
   })
 })
+
+describe('时间占位符（docs/date-prefix-design.md）', () => {
+  const CLOCK = new Date(2025, 9, 15, 23, 17, 5)   // 2025-10-15 23:17:05 本地时间
+  const rules = normalizeRules({
+    root: 'docs',
+    categories: {
+      daily: { folder: 'daily', keywords: ['纪要', 'daily'], dest: 'daily/{date}-{slug}.md' },
+      minutes: { folder: 'minutes', keywords: ['会议'], dest: 'minutes/{date:YYYYMMDD}/{slug}.md' },
+      adr: { folder: 'adr', keywords: ['决策'], dest: 'adr/{date}-{auto_number:4}-{slug}.md' },
+    },
+  }, 'md')
+  const loaded: Loaded = { rules, path: '/ws/.dsh/folder-path-rules/md.yaml' }
+  const runAt = (target: string, tree?: Tree, priorDenials = 0) =>
+    decide({ target: join(WS, target), workspaceRoot: WS, loaded, tree, priorDenials, now: CLOCK, listNames: () => [] })
+
+  it('renderDest：六个 token 与字面量', () => {
+    expect(renderDest('{date}', {}, { now: CLOCK })).toBe('2025-10-15')
+    expect(renderDest('{time}', {}, { now: CLOCK })).toBe('2317')
+    expect(renderDest('{datetime}', {}, { now: CLOCK })).toBe('2025-10-15_2317')
+    expect(renderDest('{date:YYYYMMDD}', {}, { now: CLOCK })).toBe('20251015')
+    expect(renderDest('{time:HHmmss}', {}, { now: CLOCK })).toBe('231705')
+    expect(renderDest('{datetime:YYYY/MM/DD}', {}, { now: CLOCK })).toBe('2025/10/15')
+    expect(renderDest('{date} 纪要-{slug}', { slug: 'x' }, { now: CLOCK })).toBe('2025-10-15 纪要-x')
+  })
+
+  it('缺日期前缀：纠偏到带当天日期的路径', () => {
+    const v = runAt('docs/daily/cache.md', tree([{ name: 'daily' }]))
+    expect(v).toMatchObject({ kind: 'correct', code: 'date-prefix', to: join(WS, 'docs/daily/2025-10-15-cache.md') })
+  })
+
+  it('已带前缀：按剥掉前缀后的 slug 校验命名，不再纠偏', () => {
+    const v = runAt('docs/daily/2025-10-15-cache.md', tree([{ name: 'daily' }]))
+    expect(v).toMatchObject({ kind: 'pass' })
+  })
+
+  it('时间只在目录段时：已落在当天目录里 → 放行；直接落在分类目录 → 纠偏进日期子目录', () => {
+    expect(runAt('docs/minutes/20251015/standup.md', tree([{ name: 'minutes', subdirs: ['20251015'] }]))).toMatchObject({ kind: 'pass' })
+    expect(runAt('docs/minutes/standup.md', tree([{ name: 'minutes' }]))).toMatchObject({
+      kind: 'correct', code: 'date-prefix', to: join(WS, 'docs/minutes/20251015/standup.md'),
+    })
+  })
+
+  it('文件名前缀格式按 dest 声明：{date:YYYYMMDD} 剥 8 位纯数字后再渲染', () => {
+    const rules8 = normalizeRules({
+      root: 'docs',
+      categories: { log: { folder: 'log', keywords: ['日志'], dest: 'log/{date:YYYYMMDD}-{slug}.md' } },
+    }, 'md')
+    const v = decide({ target: join(WS, 'docs/log/20251015-cache.md'), workspaceRoot: WS, loaded: { rules: rules8, path: '/p' }, tree: tree([{ name: 'log' }]), priorDenials: 0, now: CLOCK, listNames: () => [] })
+    expect(v).toMatchObject({ kind: 'pass' })
+  })
+})

@@ -421,3 +421,33 @@ describe('守护：随包示例规则可被加载器解析', () => {
     expect(normalizeRules(yaml.load(EXAMPLE), 'md').root).toBe('docs')
   })
 })
+
+describe('时间占位符：撞名不覆盖', () => {
+  it('同一天同一主题的第二次创建：打回并说清原因，原文件不动', async () => {
+    const rules = [
+      'type: md',
+      'root: docs',
+      'categories:',
+      '  daily:',
+      '    folder: daily',
+      '    keywords: [纪要]',
+      '    dest: "daily/{date}-{slug}.md"',
+    ].join('\n')
+    writeFileSync(join(ws, '.dsh/folder-path-rules/md.yaml'), rules, 'utf8')
+    mkdirSync(join(ws, 'docs/daily'), { recursive: true })
+    const d = new Date()
+    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const existing = join(ws, `docs/daily/${stamp}-cache.md`)
+    writeFileSync(existing, '# 原内容\n', 'utf8')
+
+    const store = new RulesStore({ workspaceRoot: ws })
+    let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
+    installInterceptor(store, (l) => { listener = l })
+    const exec = { name: 'write', arguments: { file_path: 'docs/daily/cache.md', content: '# 新内容\n' }, callId: 'c', agent: { id: 'a1' } } as unknown as ToolExecution
+    const decision = await listener!(exec, async () => ({ kind: 'allow' }))
+
+    expect(decision.kind).toBe('deny')
+    expect((decision as { reason: string }).reason).toContain('同一天同一主题')
+    expect(readFileSync(existing, 'utf8')).toBe('# 原内容\n')   // 绝不覆盖
+  })
+})
