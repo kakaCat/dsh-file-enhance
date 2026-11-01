@@ -217,6 +217,44 @@ describe('拦截器', () => {
     expect(seen[0]?.abs).toBe(join(ws, 'docs/guides/login-guide.md'))
   })
 
+  it('落点被并发占用（EEXIST）：拒写并说清是抢占，不报成「失败」', async () => {
+    const store = new RulesStore({ workspaceRoot: ws })
+    let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
+    installInterceptor(store, (l) => { listener = l }, {
+      writeFile: () => {
+        const err = new Error('EEXIST: file already exists') as NodeJS.ErrnoException
+        err.code = 'EEXIST'
+        throw err
+      },
+    })
+    const exec = { name: 'write', arguments: { file_path: 'docs/指南-并发.md', content: '# x\n' }, callId: 'c', agent: { id: 'a1' } } as unknown as ToolExecution
+    const decision = await listener!(exec, async () => ({ kind: 'allow' }))
+
+    expect(decision.kind).toBe('deny')
+    const reason = (decision as { reason: string }).reason
+    expect(reason).toContain('占用')
+    expect(reason).not.toContain('失败')
+  })
+
+  it('两个 agent 同时写同一落点：一个成功一个被拒，文件内容不被撕裂', async () => {
+    const store = new RulesStore({ workspaceRoot: ws })
+    let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
+    installInterceptor(store, (l) => { listener = l })   // 走默认 node:fs 回落（wx 语义）
+    const call = (content: string, agentId: string): Promise<PreToolDecision> => {
+      const exec = { name: 'write', arguments: { file_path: 'docs/指南-并发.md', content }, callId: 'c', agent: { id: agentId } } as unknown as ToolExecution
+      return listener!(exec, async () => ({ kind: 'allow' }))
+    }
+
+    const decisions = await Promise.all([call('# A\n', 'agent-a'), call('# B\n', 'agent-b')])
+
+    // 自动纠偏成功也会 deny（原调用被拒、文件已按规范落盘），所以按回执文案区分谁真的写下去了
+    const reasons = decisions.map((d) => String((d as { reason?: string }).reason ?? ''))
+    expect(reasons.filter((r) => r.includes('已按项目规范写入'))).toHaveLength(1)
+    expect(reasons.filter((r) => /已存在|占用/.test(r))).toHaveLength(1)
+    const written = readFileSync(join(ws, 'docs/guides/指南-并发.md'), 'utf8')
+    expect(['# A\n', '# B\n']).toContain(written)   // 只可能是一整份，不会两半拼一起
+  })
+
   it('拦截记忆按 denialTtlMs 过期：窗口内第二次放行，过期后重新计一次', async () => {
     const store = new RulesStore({ workspaceRoot: ws })
     let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined

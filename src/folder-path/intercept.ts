@@ -240,9 +240,15 @@ export function installInterceptor(
       }
     } catch (err) {
       bump(key)
+      // 并发写同一落点：另一个调用先写出了文件，wx 拒绝覆盖。这不是「失败」，要说清是抢占。
+      const code = (err as NodeJS.ErrnoException | undefined)?.code
+      const lead = code === 'EEXIST'
+        ? '自动纠偏取消：规范落点刚刚被另一次写入占用（并发），为避免覆盖本次未写入。'
+          + '请换一个文件名，或先用 read 确认内容后直接 edit 那个文件。'
+        : `自动纠偏失败（${String((err as Error)?.message ?? err)}）。`
       return {
         kind: 'deny',
-        reason: `自动纠偏失败（${String((err as Error)?.message ?? err)}）。\n\n`
+        reason: lead + '\n\n'
           + renderGuidance(
             { kind: 'deny', code: 'unclassified', target: relative(workspaceRoot, target), rules, rootAbs, tree },
             { suggestedPath: relative(workspaceRoot, verdict.to), source: verdict.source },

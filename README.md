@@ -464,7 +464,7 @@ service.provision('/path/to/workspace', {
 
 ```bash
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（10 文件 / 173 用例）
+pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（10 文件 / 175 用例）
 pnpm build       # tsdown → dist/
 pnpm check:dist  # build 之后跑：入口文件、插件契约、bundle patch、清单本地化
 ```

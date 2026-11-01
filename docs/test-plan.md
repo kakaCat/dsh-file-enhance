@@ -3,8 +3,8 @@
 > **2026-10-15 变更**：插件**工具面归零**——`file_resolve` / `file_propose` / `file_check` / `file_rules_init`
 > 四个工具与 `src/folder-path/tools.ts` 已删除（理由见 README「工具面：零」）。本文涉及这四个工具的条目为
 > **历史记录**；现状替代：宿主的 `ask_user_question`（问用户）+ 原生 `write`（改规则 yaml）。
-> 用例基线（2026-11-01 复核）：`pnpm test` = **10 个文件 / 173 条用例全绿**
-> （decide 24、rules 10、intercept 25、index 3、format 63、docs 2、scaffold 16、scaffold-specs 7、service 18、perf 1）。
+> 用例基线（2026-11-01 复核）：`pnpm test` = **10 个文件 / 175 条用例全绿**
+> （decide 24、rules 10、intercept 27、index 3、format 63、docs 2、scaffold 16、scaffold-specs 7、service 18、perf 1）。
 
 > 范围：`folder-path`（放哪、叫什么）+ `content-format`（内容长什么样）+ 二者在 `tools/pre-execute` / `tools/post-execute` 上的接线。
 > 本方案不写用例步骤——用例住在 `test/*.test.ts`（见 `docs/content-validation-design.md` §9）。
@@ -138,7 +138,7 @@ pnpm build       # tsdown → dist/index.mjs
 | ~~P1~~ | ~~`scanReality` / 规则 mtime 热重载~~ | **已关闭**：改规则（推进 mtime）后同一条记忆下立即放行，无需重启 |
 | ~~P2~~ | ~~C3 性能基线~~ | **已关闭**：`test/perf.test.ts` 跑 prd × 1171 行，本机 min 0.43ms / p95 2.20ms（预算 50ms） |
 | ~~P2~~ | ~~C4 沙箱逃逸~~ | **口径已用用例钉住**：脚本里看不到 `process` / `require` / `fs`；`node:vm` 本身不是安全边界，已在 README「数据与隐私」写明信任模型 |
-| P2 | 并发写同路径 | 两个 agent 同时写同一目标属于边缘场景，出问题不静默 |
+| ~~P2~~ | ~~并发写同路径~~ | **已关闭**：两个 agent 同时写同一落点，一个成功一个被拒（回执区分「已存在 / 占用」），文件不会被撕裂 |
 
 ---
 
