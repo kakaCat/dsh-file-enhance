@@ -2,6 +2,23 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.5] - 2026-11-01
+
+修一个「两个子系统互相截胡」的默认配置问题：PRD 文档之前走不到 prd 内容规范。
+
+### 修正
+
+- **随包默认规则给 PRD 单列一类**：新增 `prd` 分类（`docs/prd/{slug}.md`，关键词 `prd` / `产品需求`），
+  并从 `project` 集合型分类的关键词里拿掉 `prd`。
+  过去 `docs/prd-登录.md` 会被 `project` 判成「要先有 PRJ-xxxx 实例目录」，
+  而路径判定在 `pre-execute`、内容校验在 `post-execute`——于是 prd 内容规范永远没有机会执行。
+  现在 `docs/prd-登录.md` → 纠偏到 `docs/prd/prd-登录.md` → 命中 prd 规范校验。
+
+### 说明
+
+- 已用自己 `.dsh/folder-path-rules/md.yaml` 的项目**不受影响**（工作区规则优先于内置默认）；
+  想用新默认就把工作区那份删掉，或照 `examples/md.yaml` 手工加这一段。
+
 ## [0.1.4] - 2026-11-01
 
 ### 改进

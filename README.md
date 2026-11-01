@@ -436,9 +436,9 @@ service.provision('/path/to/workspace', {
 - **工作区根按 agent 解析**，不是插件进程 cwd：`workingDirectory` 服务（dsh ≥0.2.1-alpha.2）→ `exec.agent.session.header.cwd`（0.2.0-rc.x）→ `process.cwd()` 回落
 - **改插件代码后需重启宿主**：ESM 模块缓存，HMR 不监视 `node_modules` 里的 bundle
 - **路径规则先于内容规范命中**：路径判定在 `pre-execute`（落盘前），内容校验在 `post-execute`（落盘后）——
-  被路径拦下的文件根本走不到内容校验。随包 `md.yaml` 的 `project` 关键词含 `prd`，所以 `docs/prd-*.md`
-  会被要求先有 `PRJ-xxxx` 实例目录，`prd` 内容规范因此匹配不到它。想让 PRD 直接住 `docs/`，
-  把 `prd` 从那条关键词里删掉（[examples/md.yaml](examples/md.yaml) 里有同样一句提醒）
+  被路径拦下的文件根本走不到内容校验。所以「同一个词被两条规则抢」是会静默失效的：
+  随包规则为此把 PRD 单列一类（`docs/prd/`），并把 `prd` / `产品需求` 从 `project` 的关键词里拿掉了。
+  自己加分类时注意别让两条分类共用同一个关键词
 
 ## 兼容性
 
@@ -464,7 +464,7 @@ service.provision('/path/to/workspace', {
 
 ```bash
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（10 文件 / 175 用例）
+pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（10 文件 / 178 用例）
 pnpm build       # tsdown → dist/
 pnpm check:dist  # build 之后跑：入口文件、插件契约、bundle patch、清单本地化
 ```

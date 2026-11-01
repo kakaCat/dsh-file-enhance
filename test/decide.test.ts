@@ -4,8 +4,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import { join } from 'node:path'
+import yaml from 'js-yaml'
 import { decide, renderDest, nextAutoNumber, matchReality } from '../src/folder-path/decide.js'
-import { normalizeRules } from '../src/folder-path/rules.js'
+import { DEFAULT_MD_RULES_YAML, normalizeRules } from '../src/folder-path/rules.js'
 import type { Loaded, RuleSet, Tree } from '../src/folder-path/types.js'
 
 const WS = '/ws'
@@ -181,5 +182,25 @@ describe('渲染与匹配原语', () => {
   it('matchReality 支持单复数', () => {
     expect(matchReality(tree([{ name: 'guides' }]), 'setup-guide.md')?.name).toBe('guides')
     expect(matchReality(tree([{ name: 'api' }]), 'setup-guide.md')).toBeUndefined()
+  })
+})
+
+describe('随包默认规则：PRD 与内容规范的接线', () => {
+  const shipped: RuleSet = normalizeRules(yaml.load(DEFAULT_MD_RULES_YAML), 'md')
+  const loaded: Loaded = { rules: shipped, path: '/ws/.dsh/folder-path-rules/md.yaml' }
+
+  it('docs/prd-登录.md 纠偏到 docs/prd/，不再掉进 project 集合型分类', () => {
+    const v = run('docs/prd-登录.md', { loaded })
+    expect(v).toMatchObject({ kind: 'correct', to: join(WS, 'docs/prd/prd-登录.md') })
+  })
+
+  it('「产品需求」同样归 prd（否则会被「需求」抢进需求池）', () => {
+    const v = run('docs/产品需求-登录.md', { loaded })
+    expect(v).toMatchObject({ kind: 'correct', category: { key: 'prd' } })
+  })
+
+  it('两条分类不抢同一个关键词：prd 不在 project 的 keywords 里', () => {
+    expect(shipped.categories.project?.keywords).not.toContain('prd')
+    expect(shipped.categories.prd?.keywords).toContain('prd')
   })
 })
