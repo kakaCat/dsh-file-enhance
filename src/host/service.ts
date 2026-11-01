@@ -84,10 +84,28 @@ export interface EnsureResult {
   formats: EnsurePart
 }
 
+/** 一个类型为什么没生效（写坏的规则 / 缺文件的目录）。 */
+export interface StatusIssue {
+  /** 类型键：路径规则是扩展名（如 md），内容规范是类型目录名（如 prd）。 */
+  name: string
+  /** 人话原因（YAML 语法错、缺 match、缺 spec.yaml…）。 */
+  reason: string
+}
+
 /** `status` 的单个子系统结果（只读）。 */
 export interface StatusPart {
   dir: string
+  /** 解析通过、当前**真正生效**的类型。 */
   types: string[]
+  /**
+   * 有文件但读不懂的类型 + 原因。
+   *
+   * 这条是给「规则写了却不生效」用的：加载器过去只 warn 一句就跳过，
+   * 用户看到的只是「插件没按我的规则走」；现在能从服务里直接读出坏在哪。
+   */
+  invalid: StatusIssue[]
+  /** 有目录、却没有规范文件的条目（只可能出现在内容规范侧）。 */
+  missing: StatusIssue[]
 }
 
 export interface StatusResult {
@@ -223,11 +241,23 @@ export function createFileEnhanceService(opts: FileEnhanceServiceOptions = {}): 
       const base = baseOf(root)
       const rulesStore = new RulesStore({ workspaceRoot: base })
       const formatStore = new FormatStore({ workspaceRoot: base })
-      const formatsDir = formatStore.dirOf(base)
-      // 只读：不调用 FormatStore.all()（它会触发冷启动垫片），也不碰 RulesStore.scaffoldDefault。
+      // 只读：不调用 FormatStore.all()（它会触发冷启动垫片），也不碰 RulesStore.scaffoldDefault；
+      // diagnose 只扫盘与解析，顺手把坏掉的类型连同原因带出来（types 只列真正生效的）。
+      const rules = rulesStore.diagnose(base)
+      const formats = formatStore.diagnose(base)
       return {
-        rules: { dir: rulesStore.dirOf(base), types: rulesStore.types(base) },
-        formats: { dir: formatsDir, types: formatTypesIn(formatsDir) },
+        rules: {
+          dir: rulesStore.dirOf(base),
+          types: rules.valid,
+          invalid: rules.invalid.map((i) => ({ name: i.ext, reason: i.reason })),
+          missing: [],
+        },
+        formats: {
+          dir: formatStore.dirOf(base),
+          types: formats.specs.map((s) => s.name).sort(),
+          invalid: formats.invalid.map((i) => ({ name: i.name, reason: i.reason })),
+          missing: formats.missing.map((i) => ({ name: i.name, reason: i.reason })),
+        },
       }
     },
 

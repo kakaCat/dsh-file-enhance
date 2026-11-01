@@ -89,8 +89,20 @@ export function installInterceptor(
   const mkdirp = deps.mkdirp ?? ((p: string) => { mkdirSync(p, { recursive: true }) })
   const denials = new Map<string, Denial>()
 
+  /**
+   * 清掉过期条目。键是 `agent:工作区:目标路径`，长会话 / 多 agent / 多工作区下只增不删会缓慢膨胀；
+   * 过期条目的语义本来就等于「没有记忆」，删掉不改变任何判定。每次记录拦截前顺手扫一遍，
+   * 单次 O(存活条目数)——10 分钟窗口内的被拦目标通常只有个位数。
+   */
+  const prune = (now: number): void => {
+    for (const [key, entry] of denials) {
+      if (now - entry.at >= ttl) denials.delete(key)
+    }
+  }
+
   const bump = (key: string): number => {
     const now = Date.now()
+    prune(now)
     const prev = denials.get(key)
     const count = prev !== undefined && now - prev.at < ttl ? prev.count + 1 : 1
     denials.set(key, { count, at: now })

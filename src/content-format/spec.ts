@@ -165,22 +165,56 @@ function specFileIn(dir: string): string | undefined {
   return undefined
 }
 
-/** 读一个规范目录：每个类型子目录一份 spec（+ 约定的 template.md）。非法类型跳过并告警。 */
-export function readSpecDir(specsDir: string, logger?: LoggerLike): FormatSpec[] {
-  const out: FormatSpec[] = []
+/** 一个类型目录的诊断结果：为什么这份规范没生效。 */
+export interface SpecIssue {
+  /** 类型目录名。 */
+  name: string
+  /** 人话原因（YAML 语法错 / 缺 match / 缺 spec 文件…）。 */
+  reason: string
+}
+
+/** 扫一遍规范目录的结果：能用的、坏的、缺文件的，分开列。 */
+export interface SpecScan {
+  specs: FormatSpec[]
+  /** 有 spec 文件但解析失败（改动前是「静默不生效」）。 */
+  invalid: SpecIssue[]
+  /** 有目录但没有 spec.yaml / spec.yml。 */
+  missing: SpecIssue[]
+}
+
+/**
+ * 扫一个规范目录：解析全部类型，**不吞错误**——坏的那份连同原因一起返回。
+ *
+ * `readSpecDir` 只关心能用的（校验照常跑）；诊断入口（`fileEnhance.status`）需要知道
+ * 「规则写了为什么不生效」，所以把 invalid / missing 也带出来。
+ */
+export function scanSpecDir(specsDir: string, logger?: LoggerLike): SpecScan {
+  const scan: SpecScan = { specs: [], invalid: [], missing: [] }
   for (const name of typeDirs(specsDir)) {
     const dir = join(specsDir, name)
     const specPath = specFileIn(dir)
-    if (specPath === undefined) { logger?.warn?.('format spec ' + name + '/ 缺 ' + SPEC_FILE + '，已跳过'); continue }
+    if (specPath === undefined) {
+      const reason = '缺 ' + SPEC_FILE + ' / ' + SPEC_FILE_ALT
+      logger?.warn?.('format spec ' + name + '/ ' + reason + '，已跳过')
+      scan.missing.push({ name, reason })
+      continue
+    }
     const template = existsSync(join(dir, TEMPLATE_FILE)) ? TEMPLATE_FILE : undefined
     const example = existsSync(join(dir, EXAMPLE_FILE)) ? EXAMPLE_FILE : undefined
     try {
-      out.push(normalizeSpec(yaml.load(readFileSync(specPath, 'utf8')), specPath, { name, template, example }))
+      scan.specs.push(normalizeSpec(yaml.load(readFileSync(specPath, 'utf8')), specPath, { name, template, example }))
     } catch (err) {
-      logger?.warn?.('format spec ' + name + '/ 非法——' + String((err as Error)?.message ?? err))
+      const reason = String((err as Error)?.message ?? err)
+      logger?.warn?.('format spec ' + name + '/ 非法——' + reason)
+      scan.invalid.push({ name, reason })
     }
   }
-  return out
+  return scan
+}
+
+/** 读一个规范目录：每个类型子目录一份 spec（+ 约定的 template.md）。非法类型跳过并告警。 */
+export function readSpecDir(specsDir: string, logger?: LoggerLike): FormatSpec[] {
+  return scanSpecDir(specsDir, logger).specs
 }
 
 export class FormatStore {
@@ -270,6 +304,16 @@ export class FormatStore {
   /** 按文件名（+可选相对路径）匹配 spec（无命中 → undefined）。 */
   match(relPath: string, fileName: string, ext: string, root?: string): FormatSpec | undefined {
     return matchSpec(this.all(root), relPath, fileName, ext)
+  }
+
+  /**
+   * 诊断（只读）：把规范目录扫一遍，坏的与缺的连同原因一起返回。
+   *
+   * 与 `all()` 的区别是**不垫片、不吞错**：这里回答的是「为什么我的规范没生效」，
+   * 而不是「这次校验按哪几份规范跑」。给 `fileEnhance.status` 用。
+   */
+  diagnose(root?: string): SpecScan {
+    return scanSpecDir(this.dirOf(root ?? this.workspaceRoot), this.logger)
   }
 }
 

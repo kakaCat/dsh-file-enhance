@@ -241,6 +241,7 @@ export type {
   FormatProvision,
   ProvisionResult,
   RuleProvision,
+  StatusIssue,
   StatusPart,
   StatusResult,
 } from './host/service.js'

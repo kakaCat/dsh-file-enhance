@@ -3,8 +3,8 @@
 > **2026-10-15 变更**：插件**工具面归零**——`file_resolve` / `file_propose` / `file_check` / `file_rules_init`
 > 四个工具与 `src/folder-path/tools.ts` 已删除（理由见 README「工具面：零」）。本文涉及这四个工具的条目为
 > **历史记录**；现状替代：宿主的 `ask_user_question`（问用户）+ 原生 `write`（改规则 yaml）。
-> 用例基线（2026-11-01 复核）：`pnpm test` = **9 个文件 / 148 条用例全绿**
-> （decide 24、rules 10、intercept 17、index 3、format 54、docs 2、scaffold 16、scaffold-specs 7、service 15）。
+> 用例基线（2026-11-01 复核）：`pnpm test` = **9 个文件 / 152 条用例全绿**
+> （decide 24、rules 10、intercept 18、index 3、format 54、docs 2、scaffold 16、scaffold-specs 7、service 18）。
 
 > 范围：`folder-path`（放哪、叫什么）+ `content-format`（内容长什么样）+ 二者在 `tools/pre-execute` / `tools/post-execute` 上的接线。
 > 本方案不写用例步骤——用例住在 `test/*.test.ts`（见 `docs/content-validation-design.md` §9）。
@@ -56,7 +56,7 @@
 | A6 | 集合型实例轴 | 实例存在 + 变体 → 放行；实例不存在 → `need-allocate`；编号格式非法 → `bad-instance` | ✅ |
 | A7 | 规则文件非法 | `rules-invalid` 拦截并指名错误 → 第二次放行（不因坏规则卡死 agent） | ✅ |
 | A8 | 代写端口 | 注入 `writeFile` 替身，验证落点 = 规范路径、内容原样 | ✅ 1 条 |
-| A9 | 二次判定与记忆 | 改旧文件不拦；同一目标第二次放行；`denialTtlMs` 超时视为新尝试；**多 agent 计数隔离**（key = `agent:id`） | ⚠️ 后两条未测 |
+| A9 | 二次判定与记忆 | 改旧文件不拦；同一目标第二次放行；`denialTtlMs` 超时视为新尝试；**多 agent 计数隔离**（key = `agent:id`） | ⚠️ 仅「多 agent 计数隔离」未测（超时已补） |
 | A10 | 指引单文案 | 根目录禁令含【可用分类】；方案 B 含【正确路径】【请重试】；方案 A 含「已按项目规范写入」 | ✅ 片段断言 |
 | A11 | 原语边界 | `nextAutoNumber`（空目录→`0001`、取 max+1、补零）、`renderDest` 各占位符、`matchReality` 单复数 | ✅ 部分 |
 
@@ -134,7 +134,7 @@ pnpm build       # tsdown → dist/index.mjs
 | **P0** | post 钩子的 `edit` 分支（`op=update`、`before≠null`）未测 | `edit` 是日常路径，delta 归责写错就是大面积误伤 |
 | **P0** | C1 校验异常降级为放行 | 校验器一旦抛错就阻断写文件，比不校验更糟 |
 | **P0** | C2 路径穿越 | 规范路径算到工作区之外是越权写入 |
-| P1 | A9 `denialTtlMs` 超时、多 agent 计数隔离 | 记忆串味会让「第二次放行」提前或滞后 |
+| P1 | A9 多 agent 计数隔离（`denialTtlMs` 超时已补测） | 记忆串味会让「第二次放行」提前或滞后 |
 | P1 | B10 `on_exhausted: block` / `off` / `strict` / `sameContent` | `warn` 与 `enforce_on` 已补测，其余声明行为仍缺显式用例 |
 | P1 | B4 七个原语无直接用例 | 靠示例间接覆盖，改坏一个不一定会红 |
 | ~~P1~~ | ~~四个工具（`file_resolve` / `file_propose` / `file_check` / `file_rules_init`）无测试文件~~ | **缺口已关闭**：四个工具于 2026-10-15 随工具面归零删除，`src/folder-path/tools.ts` 不再存在 |

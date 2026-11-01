@@ -35,6 +35,8 @@
   （requirement / prd / design / metrics / research），与内置默认**逐字节一致**（`pnpm sync:specs` 生成，测试守护）。
 - **Host 服务 `fileEnhance`**：`ensure` / `status` / `provision`，供上层在动手之前按 profile 预置规范；
   `provision` 先校验全部输入再落盘（零字节写入保证），已存在的文件一律跳过、绝不覆写。
+  `status` 除生效类型外还给出 `invalid` / `missing`（坏掉的规则或缺规范文件的目录，连同原因）——
+  「规则写了却不生效」终于能查，而不是只靠现象猜。
 - **结构化日志**：每次内容校验记一条 `spec=… file=… rules=… errors=… warnings=… attempt=n/m`；
   打回走 warn、`warn` 模式 / 仅 warning / 预算用尽放行走 info、未命中任何规范与通过走 debug——
   误报率与命中率可统计，不再只能靠猜。
@@ -51,7 +53,7 @@
 ### 工程
 
 - TypeScript + tsdown 构建（ESM + `.d.mts` 类型），`dist/` 不入库，`prepack` 自动构建。
-- vitest：**9 文件 / 148 用例**，含示例规范守护（模板必须通过自己的 spec）与 `docs/` 真实文稿守护。
+- vitest：**9 文件 / 152 用例**，含示例规范守护（模板必须通过自己的 spec）与 `docs/` 真实文稿守护。
 - GitHub Actions CI：typecheck → test → build → dist 装载冒烟（`pnpm check:dist`）。
 - 包元数据、MIT LICENSE、README、插件清单本地化（`locale/zh.json`、`locale/en.json`）。
 

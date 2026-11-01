@@ -380,13 +380,18 @@ cp -r examples/file-format-specs .dsh/file-format-specs     # 内容规范（按
 | 方法 | 作用 | 写盘纪律 |
 |---|---|---|
 | `ensure(root)` | 预置默认规范（路径规则 + 五套文档规范），幂等 | 只写缺失文件 |
-| `status(root)` | 读当前规范清单（规则类型、规范类型） | 不写盘 |
+| `status(root)` | 读当前规范清单：**生效的类型** + 坏掉的（`invalid`）与缺规范文件的（`missing`）连同原因 | 不写盘 |
 | `provision(root, profile)` | 按 `{ rules, formats }` 落指定规范 | 只写缺失文件；**先整体校验**，任一非法就抛 `FileEnhanceError`（`FILE_ENHANCE_INVALID_INPUT`），一个字节都不写 |
 
 ```ts
 const service = ctx.fileEnhance                 // cordis 服务面
 service.ensure('/path/to/workspace')            // → { rules: { dir, types, created }, formats: { … } }
-service.status('/path/to/workspace')            // → { rules: { dir, types }, formats: { dir, types } }
+service.status('/path/to/workspace')
+// → {
+//     rules:   { dir, types: ['md'], invalid: [], missing: [] },
+//     formats: { dir, types: ['design', 'prd'], invalid: [{ name, reason }], missing: [{ name, reason }] },
+//   }
+// invalid / missing 就是「规则写了却不生效」的答案：YAML 写坏、缺 match、目录里没 spec.yaml 都在这
 service.provision('/path/to/workspace', {
   rules: [{ ext: 'md', yaml: '<md.yaml 全文>' }],
   formats: [{ name: 'prd', spec: '<spec.yaml 全文>', template: '<template.md 正文>' }],
@@ -455,7 +460,7 @@ service.provision('/path/to/workspace', {
 
 ```bash
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（9 文件 / 148 用例）
+pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（9 文件 / 152 用例）
 pnpm build       # tsdown → dist/
 pnpm check:dist  # build 之后跑：入口文件、插件契约、bundle patch、清单本地化
 ```

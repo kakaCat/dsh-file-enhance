@@ -216,6 +216,21 @@ describe('拦截器', () => {
     expect(seen[0]?.root).toBe(ws)
     expect(seen[0]?.abs).toBe(join(ws, 'docs/guides/login-guide.md'))
   })
+
+  it('拦截记忆按 denialTtlMs 过期：窗口内第二次放行，过期后重新计一次', async () => {
+    const store = new RulesStore({ workspaceRoot: ws })
+    let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
+    installInterceptor(store, (l) => { listener = l }, { denialTtlMs: 25 })
+    const call = async (filePath: string): Promise<PreToolDecision> => {
+      const exec = { name: 'write', arguments: { file_path: filePath, content: '# hi\n' }, callId: 'c', agent: { id: 'a1' } } as unknown as ToolExecution
+      return listener!(exec, async () => ({ kind: 'allow' }))
+    }
+
+    expect((await call('docs/未分类文档.md')).kind).toBe('deny')   // 首次：拦下并指路
+    expect((await call('docs/未分类文档.md')).kind).toBe('allow')  // 窗口内第二次：自由发挥
+    await new Promise((resolve) => setTimeout(resolve, 40))        // 让记忆过期
+    expect((await call('docs/未分类文档.md')).kind).toBe('deny')   // 过期后重新计一次，且过期条目已被清理
+  })
 })
 
 describe('守护：随包示例规则可被加载器解析', () => {

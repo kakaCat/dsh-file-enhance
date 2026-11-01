@@ -123,6 +123,46 @@ describe('status：只读', () => {
     expect(r.rules.dir).toBe(RULES_DIR(ws))
     expect(r.formats.dir).toBe(FORMATS_DIR(ws))
   })
+
+  it('健康的规范：invalid / missing 都为空', () => {
+    const ws = makeWorkspace()
+    const svc = createFileEnhanceService({ workspaceRoot: ws })
+    svc.ensure(ws)
+
+    const r = svc.status(ws)
+
+    expect(r.rules.invalid).toEqual([])
+    expect(r.formats.invalid).toEqual([])
+    expect(r.formats.missing).toEqual([])
+    expect(r.formats.types.length).toBeGreaterThan(0)
+  })
+
+  it('规则 yaml 写坏 → 进 invalid 并给出原因（过去只静默跳过）', () => {
+    const ws = makeWorkspace()
+    mkdirSync(RULES_DIR(ws), { recursive: true })
+    writeFileSync(join(RULES_DIR(ws), 'md.yaml'), 'type: md\nroot: docs\n', 'utf8') // 缺 categories
+
+    const r = createFileEnhanceService({ workspaceRoot: ws }).status(ws)
+
+    expect(r.rules.types).toEqual([])
+    expect(r.rules.invalid).toHaveLength(1)
+    expect(r.rules.invalid[0]?.name).toBe('md')
+    expect(r.rules.invalid[0]?.reason).toContain('categories')
+  })
+
+  it('内容规范：坏 spec 进 invalid，只有目录没 spec 的进 missing', () => {
+    const ws = makeWorkspace()
+    mkdirSync(join(FORMATS_DIR(ws), 'prd'), { recursive: true })
+    writeFileSync(join(FORMATS_DIR(ws), 'prd/spec.yaml'), 'match: []\n', 'utf8') // match 为空 → 拒绝加载
+    mkdirSync(join(FORMATS_DIR(ws), 'draft-only'), { recursive: true })
+
+    const r = createFileEnhanceService({ workspaceRoot: ws }).status(ws)
+
+    expect(r.formats.types).toEqual([])
+    expect(r.formats.invalid.map((i) => i.name)).toEqual(['prd'])
+    expect(r.formats.invalid[0]?.reason).toContain('match')
+    expect(r.formats.missing.map((i) => i.name)).toEqual(['draft-only'])
+  })
 })
 
 describe('provision：按 profile 写入', () => {

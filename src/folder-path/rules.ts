@@ -194,6 +194,25 @@ export class RulesStore {
     return this.builtinMd
   }
 
+  /**
+   * 诊断（只读）：逐类型加载，把解析失败的原因带出来。
+   *
+   * 现状是「规则写坏 → 加载器 warn 一下 → 该类型静默不生效」，用户只能靠现象猜；
+   * 这里把 `load()` 已经算出来的 `{ error }` 收集成清单，给 `fileEnhance.status` 用。
+   */
+  diagnose(root?: string): { valid: string[]; invalid: Array<{ ext: string; reason: string }> } {
+    const base = root ?? this.workspaceRoot
+    const valid: string[] = []
+    const invalid: Array<{ ext: string; reason: string }> = []
+    for (const ext of this.types(base)) {
+      const loaded = this.load(ext, base)
+      if (loaded === undefined) continue
+      if ('error' in loaded) invalid.push({ ext, reason: loaded.error })
+      else valid.push(ext)
+    }
+    return { valid, invalid }
+  }
+
   /** 规则目录里当前存在的类型键（文件名去扩展名；`_` 前缀视为草稿而跳过）。 */
   types(root?: string): string[] {
     const dir = this.dirOf(root ?? this.workspaceRoot)
