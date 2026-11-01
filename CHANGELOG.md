@@ -2,6 +2,30 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.2] - 2026-11-01
+
+补测 P1 缺口时暴露一个原语口径错误；其余为测试与基线，无其他行为变更。
+
+### 修正
+
+- **`sectionsServes` 只认 H2**：文档口径是「每个**结构节（H2）**必须带 `serves:`」，实现却用
+  `level < 2` 跳过，等于 H3 小节也被要求写 serves——与 `sectionsRequired` 的口径不一致。
+  现在与设计文档对齐：H3 及更深不再判定。
+  **受影响的 spec**：用 `sectionsServes` 且文档里有不带 serves 的 H3 小节的，之前会误报，现在不会。
+
+### 工程
+
+- 测试方案里剩余的 P1 / P2 缺口全部关闭：
+  - **B4**：7 个原语（`frontmatterPattern` / `sectionsForbidden` / `sectionsServes` / `forbiddenText` /
+    `requiredText` / `size` / `templateSections`）全部有直接用例；
+  - **B10**：`on_exhausted: block`（用尽不放行）、`mode: off`（零返回）、`diff_mode: strict`（改写照报）、
+    `sameContent`（「与你上次被拒的一致」）四条显式用例；
+  - **A9**：多 agent 计数隔离（A 的第二次放行不影响 B 的首次）；
+  - **mtime 热重载**：改规则并推进 mtime 后，同一条记忆下立即按新规则放行，无需重启；
+  - **NFR-1 性能基线**：新增 `test/perf.test.ts`，prd 规范 × 1171 行文档，
+    本机 min 0.43ms / p95 2.20ms（预算 50ms），读数打在测试输出里。
+- 用例 159 → 172（10 个文件）。
+
 ## [0.1.1] - 2026-11-01
 
 安全与鲁棒性修复，无行为变更（合规路径的表现与 0.1.0 完全一致）。

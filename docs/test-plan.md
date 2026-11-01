@@ -3,8 +3,8 @@
 > **2026-10-15 变更**：插件**工具面归零**——`file_resolve` / `file_propose` / `file_check` / `file_rules_init`
 > 四个工具与 `src/folder-path/tools.ts` 已删除（理由见 README「工具面：零」）。本文涉及这四个工具的条目为
 > **历史记录**；现状替代：宿主的 `ask_user_question`（问用户）+ 原生 `write`（改规则 yaml）。
-> 用例基线（2026-11-01 复核）：`pnpm test` = **9 个文件 / 159 条用例全绿**
-> （decide 24、rules 10、intercept 23、index 3、format 56、docs 2、scaffold 16、scaffold-specs 7、service 18）。
+> 用例基线（2026-11-01 复核）：`pnpm test` = **10 个文件 / 172 条用例全绿**
+> （decide 24、rules 10、intercept 25、index 3、format 62、docs 2、scaffold 16、scaffold-specs 7、service 18、perf 1）。
 
 > 范围：`folder-path`（放哪、叫什么）+ `content-format`（内容长什么样）+ 二者在 `tools/pre-execute` / `tools/post-execute` 上的接线。
 > 本方案不写用例步骤——用例住在 `test/*.test.ts`（见 `docs/content-validation-design.md` §9）。
@@ -56,7 +56,7 @@
 | A6 | 集合型实例轴 | 实例存在 + 变体 → 放行；实例不存在 → `need-allocate`；编号格式非法 → `bad-instance` | ✅ |
 | A7 | 规则文件非法 | `rules-invalid` 拦截并指名错误 → 第二次放行（不因坏规则卡死 agent）；**`instance.pattern` 写坏在加载期就被点名** | ✅ 2 条 |
 | A8 | 代写端口 | 注入 `writeFile` 替身，验证落点 = 规范路径、内容原样 | ✅ 1 条 |
-| A9 | 二次判定与记忆 | 改旧文件不拦；同一目标第二次放行；`denialTtlMs` 超时视为新尝试；**多 agent 计数隔离**（key = `agent:id`） | ⚠️ 仅「多 agent 计数隔离」未测（超时已补） |
+| A9 | 二次判定与记忆 | 改旧文件不拦；同一目标第二次放行；`denialTtlMs` 超时视为新尝试；多 agent 计数隔离（A 的第二次放行不影响 B 的首次） | ✅ 全 |
 | A10 | 指引单文案 | 根目录禁令含【可用分类】；方案 B 含【正确路径】【请重试】；方案 A 含「已按项目规范写入」 | ✅ 片段断言 |
 | A11 | 原语边界 | `nextAutoNumber`（空目录→`0001`、取 max+1、补零）、`renderDest` 各占位符、`matchReality` 单复数 | ✅ 部分 |
 
@@ -67,13 +67,13 @@
 | B1 | 匹配 | glob（`**` 跨目录 / `*` 段内 / `?` 单字符）→ 正则；无元字符按关键词包含；中文关键词；大小写不敏感；`priority` 大者先；`match_path` 附加约束；**无命中 → 不校验** | ✅ 全 |
 | B2 | 解析 | front-matter / H1–H6 / 表格 / **代码围栏内的 `##` 与 `|` 不算结构** | ✅ |
 | B3 | 内置原语 | `sectionsRequired`（含 `order`）/ `frontmatterRequired` / `tableRequired`（缺列、行数不足）/ `ids`（缺、重复、跳号）/ `idDetails`（核心必填、可选写了不能空） | ✅ 5 个 |
-| B4 | 原语补集 | `frontmatterPattern` / `sectionsForbidden` / `sectionsServes` / `forbiddenText` / `requiredText` / `size` / `templateSections` | ⚠️ 无直接用例（部分靠示例守护间接覆盖） |
+| B4 | 原语补集 | `frontmatterPattern`（不匹配 / pattern 非法）/ `sectionsForbidden`（带行号）/ `sectionsServes`（只认 H2）/ `forbiddenText` / `requiredText` / `size`（行数 / 字符数）/ `templateSections` | ✅ 7 个全部有直接用例 |
 | B5 | 规则引擎 | 条件树 `all/any/not/path`、量词 `each+where`、`count`、`fn`；`when` 守卫；`derive` 前向链；用户 expr / script；`warning` 不阻断 | ✅ |
 | B6 | 动态代码沙箱 | expr 真假判定；script 返回 `undefined/true/null/[]` 通过、`string`/对象/数组 违规；**抛错 → 一条「函数执行失败」不崩**；**死循环 → 超时截断** | ✅ |
 | B7 | delta 归责 | `before` 已有违规不重报；`before=null`（新建）等价 strict；**`edit` 原样重写 → 放行** | ✅ 全 |
 | B8 | 反馈契约 | 合规 → `accept` **零正文**；违规 → `block` 一次报全 + 行号 + 目标结构（template 全文 / 骨架）+ 剩余次数 | ✅ |
 | B9 | 重试与终止 | 按 `agent + canonical path` 独立计数；`max_attempts` 用尽 → `on_exhausted=allow` 放行并附警告 | ✅ |
-| B10 | 终止与模式的其余档 | `on_exhausted: block`、`mode: off`、`diff_mode: strict` 显式用例、`sameContent` 追加「内容未变」 | ⚠️ 部分覆盖（`mode: warn`、`enforce_on` 已测） |
+| B10 | 终止与模式的其余档 | `on_exhausted: block` 用尽不放行、`mode: off` 零返回、`diff_mode: strict` 改写照报、`sameContent` 追加「与你上次被拒的一致」 | ✅ 全 |
 | B11 | 代写前预校验 | `index.ts` 的 `validateContentForWrite`：代写分支不触发 post 钩子，这条是**插件不自己写不合规内容**的唯一防线 | ✅ `index.test.ts` 覆盖策略接线与落盘 |
 | B12 | 示例资产守护 | 每份示例可加载、必须有 `match` 或 `match_path`、`template` 文件存在、template 与 example 各自零 error、`owner_team` 可替代 `owner`、`status` 值域、清单有编号缺明细被拦、design 的 serves / IF 明细 | ✅ 强 |
 
@@ -134,12 +134,10 @@ pnpm build       # tsdown → dist/index.mjs
 | ~~**P0**~~ | ~~post 钩子的 `edit` 分支（`op=update`、`before≠null`）未测~~ | **已关闭**：`edit` 原样重写的 delta 归责有专测 |
 | ~~**P0**~~ | ~~C1 校验异常降级为放行~~ | **已关闭**：两侧监听器都包了 try/catch 降级 + 告警日志，各有专测 |
 | ~~**P0**~~ | ~~C2 路径穿越~~ | **已关闭**：`dest` / `root` 越出工作区一律拒写并有专测（实现见 `intercept.ts` 的 `isInside` 守卫） |
-| P1 | A9 多 agent 计数隔离（`denialTtlMs` 超时已补测） | 记忆串味会让「第二次放行」提前或滞后 |
-| P1 | B10 `on_exhausted: block` / `off` / `strict` / `sameContent` | `warn` 与 `enforce_on` 已补测，其余声明行为仍缺显式用例 |
-| P1 | B4 七个原语无直接用例 | 靠示例间接覆盖，改坏一个不一定会红 |
 | ~~P1~~ | ~~四个工具（`file_resolve` / `file_propose` / `file_check` / `file_rules_init`）无测试文件~~ | **缺口已关闭**：四个工具于 2026-10-15 随工具面归零删除，`src/folder-path/tools.ts` 不再存在 |
-| P1 | `scanReality` / 规则 mtime 热重载 | 规则改完即生效是核心承诺，无回归网 |
-| P2 | C3 性能基线、C4 沙箱逃逸、并发写同路径 | 出问题不会静默，可接受后置 |
+| ~~P1~~ | ~~`scanReality` / 规则 mtime 热重载~~ | **已关闭**：改规则（推进 mtime）后同一条记忆下立即放行，无需重启 |
+| ~~P2~~ | ~~C3 性能基线~~ | **已关闭**：`test/perf.test.ts` 跑 prd × 1171 行，本机 min 0.43ms / p95 2.20ms（预算 50ms） |
+| P2 | C4 沙箱逃逸、并发写同路径 | 出问题不会静默，可接受后置 |
 
 ---
 

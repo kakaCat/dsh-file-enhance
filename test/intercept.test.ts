@@ -4,7 +4,7 @@
  * @module dsh-file-enhance/tests/intercept
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import yaml from 'js-yaml'
@@ -326,6 +326,40 @@ describe('拦截器', () => {
 
     expect(decision).toEqual({ kind: 'allow' })
     expect(warnings.some((w) => w.includes('内部异常'))).toBe(true)
+  })
+
+  it('拦截计数按 agent 隔离：A 的第二次放行不影响 B 的首次', async () => {
+    const store = new RulesStore({ workspaceRoot: ws })
+    let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
+    installInterceptor(store, (l) => { listener = l })
+    const call = async (agentId: string, filePath: string): Promise<PreToolDecision> => {
+      const exec = { name: 'write', arguments: { file_path: filePath, content: '# hi\n' }, callId: 'c', agent: { id: agentId } } as unknown as ToolExecution
+      return listener!(exec, async () => ({ kind: 'allow' }))
+    }
+    const target = 'docs/未分类文档.md'
+
+    expect((await call('agent-a', target)).kind).toBe('deny')
+    expect((await call('agent-a', target)).kind).toBe('allow')   // A 第二次：自由发挥
+    expect((await call('agent-b', target)).kind).toBe('deny')    // B 仍是首次，不吃 A 的记忆
+  })
+
+  it('规则改完即生效：mtime 热重载，无需重启插件', async () => {
+    const store = new RulesStore({ workspaceRoot: ws })
+    let listener: ((e: ToolExecution, n: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
+    installInterceptor(store, (l) => { listener = l })
+    const call = async (filePath: string): Promise<PreToolDecision> => {
+      const exec = { name: 'write', arguments: { file_path: filePath, content: '# hi\n' }, callId: 'c', agent: { id: 'a1' } } as unknown as ToolExecution
+      return listener!(exec, async () => ({ kind: 'allow' }))
+    }
+
+    expect((await call('NOTES.md')).kind).toBe('deny')           // 根目录不在白名单
+
+    const path = join(ws, '.dsh/folder-path-rules/md.yaml')
+    writeFileSync(path, EXAMPLE.replace('root_allow: []', 'root_allow: [NOTES.md]'), 'utf8')
+    const future = new Date(Date.now() + 5000)
+    utimesSync(path, future, future)                              // 保证 mtime 变了（同一毫秒内写回不算热重载）
+
+    expect((await call('NOTES.md')).kind).toBe('allow')           // 同一条记忆下，新规则立即生效
   })
 })
 

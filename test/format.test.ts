@@ -112,6 +112,56 @@ describe('内置原语', () => {
   })
 })
 
+describe('内置原语（补集）', () => {
+  const doc = (text: string): ParsedDoc => parseDocument(text)
+
+  it('frontmatterPattern：不匹配才报，pattern 非法自成一条', () => {
+    const ok = PRIMITIVES.frontmatterPattern(doc('---\nid: PRJ-0001\n---\n'), { key: 'id', pattern: '^PRJ-\\d{4}$' })
+    expect(ok).toHaveLength(0)
+    const bad = PRIMITIVES.frontmatterPattern(doc('---\nid: PRJ-1\n---\n'), { key: 'id', pattern: '^PRJ-\\d{4}$' })
+    expect(bad[0]?.message).toContain('不匹配')
+    const broken = PRIMITIVES.frontmatterPattern(doc('---\nid: x\n---\n'), { key: 'id', pattern: '([' })
+    expect(broken[0]?.message).toContain('pattern 非法')
+  })
+
+  it('sectionsForbidden：出现即报，带行号；只认结构节不认正文里的同名文字', () => {
+    const v = PRIMITIVES.sectionsForbidden(doc('# t\n\n## 附录\n\n正文里提到「免责声明」不算\n'), { headings: ['附录', '免责声明'] })
+    expect(v).toHaveLength(1)
+    expect(v[0]?.message).toContain('附录')
+    expect(v[0]?.line).toBe(3)
+  })
+
+  it('sectionsServes：每个 H2 都要有 serves；H3 不在此列', () => {
+    const v = PRIMITIVES.sectionsServes(doc('## 摘要 serves: 全文\n\n## 背景\n\n### 小节\n'), {})
+    expect(v).toHaveLength(1)
+    expect(v[0]?.message).toContain('背景')
+    expect(PRIMITIVES.sectionsServes(doc('## 摘要 serves: FR-1\n\n## 背景  serves：全文\n'), {})).toHaveLength(0)
+  })
+
+  it('forbiddenText / requiredText：按行命中与缺失', () => {
+    const text = '# t\n\n这里写了 TODO\n'
+    const hit = PRIMITIVES.forbiddenText(doc(text), { patterns: ['TODO'] })
+    expect(hit).toHaveLength(1)
+    expect(hit[0]?.line).toBe(3)
+    expect(PRIMITIVES.requiredText(doc(text), { patterns: ['验收标准'] })[0]?.message).toContain('缺必需内容')
+    expect(PRIMITIVES.requiredText(doc(text), { patterns: ['TODO'] })).toHaveLength(0)
+  })
+
+  it('size：行数与字符数上限各自生效', () => {
+    const long = Array.from({ length: 10 }, (_, i) => `第 ${i + 1} 行`).join('\n')
+    expect(PRIMITIVES.size(doc(long), { max_lines: 5 })[0]?.message).toContain('行')
+    expect(PRIMITIVES.size(doc(long), { max_chars: 5 })[0]?.message).toContain('字符')
+    expect(PRIMITIVES.size(doc(long), { max_lines: 100, max_chars: 10000 })).toHaveLength(0)
+  })
+
+  it('templateSections：文档缺模板里的 H2 节', () => {
+    const tpl = doc('## 摘要\n\n## 验收\n')
+    const v = PRIMITIVES.templateSections(doc('## 摘要\n'), {}, tpl)
+    expect(v.map((x) => x.message).join()).toContain('缺模板章节「验收」')
+    expect(PRIMITIVES.templateSections(doc('## 摘要\n'), {}, undefined)).toHaveLength(0)
+  })
+})
+
 describe('delta：只拦新增违规', () => {
   const spec = normalizeSpec({
     name: 'x', match: ['*.md'], diff_mode: 'delta',
@@ -323,6 +373,57 @@ describe('post-execute 集成', () => {
 
     expect(decision).toEqual({ kind: 'accept' })
     expect(logs.some((l) => l.includes('内部异常'))).toBe(true)
+  })
+
+  it('mode: off → 零返回放行（连提示都不给）', async () => {
+    writeFileSync(join(ws, '.dsh/file-format-specs/prd/spec.yaml'), [
+      'match: ["prd.md"]',
+      'mode: off',
+      'rules:',
+      '  - id: sections',
+      '    assert: { fn: sectionsRequired, args: [{ headings: ["背景"] }] }',
+    ].join('\n'), 'utf8')
+    const { call } = harness()
+    expect(await call('write', 'docs/prd.md', '# 缺章节\n')).toEqual({ kind: 'accept' })
+  })
+
+  it('diff_mode: strict → 改写时历史违规照报（与 delta 相反）', async () => {
+    writeFileSync(join(ws, '.dsh/file-format-specs/prd/spec.yaml'), [
+      'match: ["prd.md"]',
+      'diff_mode: strict',
+      'rules:',
+      '  - id: sections',
+      '    assert: { fn: sectionsRequired, args: [{ headings: ["背景"] }] }',
+    ].join('\n'), 'utf8')
+    const { call } = harness()
+    const bad = '# 缺章节\n'
+    expect((await call('write', 'docs/prd.md', bad, null)).kind).toBe('block')
+    // 内容一个字没改：delta 会放行，strict 必须继续拦
+    const again = await call('edit', 'docs/prd.md', bad, bad)
+    expect(again.kind).toBe('block')
+  })
+
+  it('on_exhausted: block → 预算用尽后继续拦，不放行', async () => {
+    writeFileSync(join(ws, '.dsh/file-format-specs/prd/spec.yaml'), [
+      'match: ["prd.md"]',
+      'max_attempts: 2',
+      'on_exhausted: block',
+      'rules:',
+      '  - id: sections',
+      '    assert: { fn: sectionsRequired, args: [{ headings: ["背景"] }] }',
+    ].join('\n'), 'utf8')
+    const { call } = harness()
+    for (let i = 0; i < 5; i++) {
+      expect((await call('write', 'docs/prd.md', '# 缺章节\n')).kind).toBe('block')
+    }
+  })
+
+  it('同一份不合规内容再交一次 → 附「内容与你上次被拒的一致」提醒', async () => {
+    const { call } = harness()
+    const first = await call('write', 'docs/prd.md', '# 缺章节\n')
+    expect((first as { feedback: Array<{ text: string }> }).feedback[0].text).not.toContain('上次被拒')
+    const second = await call('write', 'docs/prd.md', '# 缺章节\n')
+    expect((second as { feedback: Array<{ text: string }> }).feedback[0].text).toContain('上次被拒')
   })
 })
 

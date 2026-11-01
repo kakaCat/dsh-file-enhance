@@ -460,7 +460,7 @@ service.provision('/path/to/workspace', {
 
 ```bash
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（9 文件 / 159 用例）
+pnpm test        # vitest：判定链 + 拦截器三态 + 格式校验 + 示例/文档守护（10 文件 / 172 用例）
 pnpm build       # tsdown → dist/
 pnpm check:dist  # build 之后跑：入口文件、插件契约、bundle patch、清单本地化
 ```
@@ -500,7 +500,7 @@ src/host/service.ts        Host 服务 fileEnhance（ensure / status / provision
 examples/md.yaml                     随包示例路径规则（唯一一份）
 examples/file-format-specs/<type>/   随包示例内容规范（spec.yaml + template.md + example.md）
 docs/                               设计与测试文档（模板设计、格式校验设计、测试方案）
-test/                               vitest：decide / intercept / rules / format / docs / service
+test/                               vitest：decide / intercept / rules / format / docs / service / perf
 scripts/sync-builtin-specs.mjs      examples/ → src/content-format/builtin-specs.ts（构建前同步）
 scripts/smoke-dist.mjs              dist 装载冒烟：入口 / 插件契约 / bundle patch / 清单本地化
 locale/                             插件清单本地化文案（zh / en）

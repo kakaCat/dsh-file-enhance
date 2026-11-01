@@ -307,10 +307,16 @@ function size(doc: ParsedDoc, params: CheckParams): CheckFailure[] {
   return out
 }
 
+/**
+ * 每个**结构节（H2）**都要带 `serves:` 标注。
+ *
+ * 只认 H2：H3 及更深是节内小节，不是结构契约的层级（与 `sectionsRequired` 同口径）。
+ * 此前这里是 `level < 2` 就跳过，等于 H3 也要写 serves——与文档口径不符，补测时暴露。
+ */
 function sectionsServes(doc: ParsedDoc): CheckFailure[] {
   const out: CheckFailure[] = []
   for (const h of doc.headings) {
-    if (h.level < 2) continue
+    if (h.level !== 2) continue
     if (!/serves\s*[:：]/i.test(h.text)) out.push(failure('serves:' + h.line + ':' + h.text, '章节「' + h.text + '」缺 serves 标注', { line: h.line }))
   }
   return out
